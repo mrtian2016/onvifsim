@@ -55,9 +55,16 @@ version="$("${binary}" --version | awk '{print $2}')"
 export VERSION="${version}"
 # 容器 / 没有 FUSE 的机器上要靠这个才能跑 AppImage 工具本身。
 export APPIMAGE_EXTRACT_AND_RUN="${APPIMAGE_EXTRACT_AND_RUN:-1}"
-# Qt 插件从这里找：conda 环境或系统 Qt 都行。
-if [ -n "${CONDA_PREFIX:-}" ]; then
-    export QMAKE="${QMAKE:-${CONDA_PREFIX}/bin/qmake6}"
+# linuxdeploy-plugin-qt 靠 qmake 问 Qt 的安装布局。官方 Qt 二进制、发行版 Qt、
+# conda 都行，但得明确指出是哪一个 —— 机器上同时有好几份 Qt 是常态。
+if [ -z "${QMAKE:-}" ]; then
+    if [ -n "${CONDA_PREFIX:-}" ] && [ -x "${CONDA_PREFIX}/bin/qmake6" ]; then
+        export QMAKE="${CONDA_PREFIX}/bin/qmake6"
+    elif command -v qmake6 >/dev/null 2>&1; then
+        QMAKE="$(command -v qmake6)"; export QMAKE
+    elif command -v qmake >/dev/null 2>&1; then
+        QMAKE="$(command -v qmake)"; export QMAKE
+    fi
 fi
 
 # linuxdeploy-plugin-qt 默认只收 xcb 一个平台插件。但 --headless 会把
@@ -66,6 +73,16 @@ fi
 # "Could not find the Qt platform plugin offscreen" 然后退出 ——
 # 而 AppImage 本来就是最可能被丢进无头服务器 / CI 的那一份产物。
 export EXTRA_PLATFORM_PLUGINS="libqoffscreen.so;libqminimal.so"
+
+# **要在支持的最老发行版上构建。** linuxdeploy 按设计把 libstdc++ / libgcc_s
+# 当系统库排除在外，所以 AppImage 对 libstdc++ 的版本要求＝构建机那一份。拿新
+# 工具链编，装到老系统上就是
+#   libstdc++.so.6: version `CXXABI_1.3.15' not found (required by libQt6Core.so.6)
+# 而「不挑发行版」正是 AppImage 存在的全部理由。v0.1.0 踩的就是这条（当时用
+# conda 的 GCC 15 编），发布工作流现在钉在 ubuntu-22.04 + runner 自带的 gcc。
+#
+# 本机验不出这条 —— 开发机的 libstdc++ 通常比目标系统新，坏包在本机一切正常。
+# 本地打的 AppImage 拿来自己测没问题，但不要当发布产物。
 
 # 分两步：先把 AppDir 填好，换掉 AppRun，再打包。合成一步的话 linuxdeploy 会在
 # 输出前重新生成 AppRun，把下面那个包装脚本盖掉。

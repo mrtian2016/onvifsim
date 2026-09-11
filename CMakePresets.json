@@ -57,7 +57,7 @@
     {
       "name": "headless",
       "displayName": "headless (no GUI, for containers/CI)",
-      "inherits": "conda",
+      "inherits": "base",
       "cacheVariables": {
         "BUILD_GUI": "OFF"
       }
@@ -65,7 +65,7 @@
     {
       "name": "release",
       "displayName": "release",
-      "inherits": "conda",
+      "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_TESTS": "OFF"
@@ -74,7 +74,7 @@
     {
       "name": "ci",
       "displayName": "CI (warnings are errors)",
-      "inherits": "conda",
+      "inherits": "base",
       "cacheVariables": {
         "ENABLE_WERROR": "ON"
       }

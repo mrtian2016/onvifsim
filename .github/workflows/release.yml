@@ -24,6 +24,16 @@ permissions:
   contents: write
   packages: write
 
+env:
+  # 官方 Qt 的版本，和 ci.yml 里钉的是同一个，改要一起改。
+  #
+  # 这里**刻意不用 conda**（原来用的是 micromamba + conda-forge 的 qt6-main）：
+  # conda 的 Qt 是新 GCC 编的，AppImage 拿到 Ubuntu 22.04 上直接
+  # `libstdc++.so.6: version CXXABI_1.3.15 not found`；Windows 那份是 MSVC 编的
+  # 却总被 runner 预装的 MinGW gcc 抢去链；还动态链着一串第三方库要打包时自己捞。
+  # 官方二进制三条都没有。理由详见 ci.yml 顶部。
+  QT_VERSION: '6.8.*'
+
 jobs:
   linux:
     name: Linux 产物
@@ -34,16 +44,14 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: 装工具链（micromamba）
-        uses: mamba-org/setup-micromamba@v2
+      - name: 装 Qt（官方二进制）
+        uses: jurplel/install-qt-action@v4
         with:
-          environment-name: onvifsim-release
-          create-args: >-
-            qt6-main
-            cmake
-            ninja
-            cxx-compiler
-          init-shell: bash
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      - name: 装 Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
 
       - name: AppImage 工具的运行期依赖
         run: |
@@ -56,26 +64,19 @@ jobs:
           # `DependencyNotFoundError: Could not find dependency: libEGL.so.1`，
           # 而且（见下）那个失败原来还会被咽掉。
 
+      # 用 **runner 自己的 gcc** 编（ubuntu-22.04 = GCC 11）。AppImage 不打包
+      # libstdc++，所以二进制要求的 GLIBCXX 版本就是构建机那一份 —— 在最老的
+      # 目标发行版上编，产物才跑得动更老的系统。反面教材是 v0.1.0：用 conda 的
+      # GCC 15 编，AppImage 在 Ubuntu 22.04 上报 `CXXABI_1.3.15 not found`。
       - name: 构建
-        shell: micromamba-shell {0}
         run: |
-          set -euo pipefail
           cmake --preset release
           cmake --build --preset release
 
-      # tar.gz **不在这儿打**：这个 job 用的是 conda 的 Qt 6.11，而 tar.gz 宣称
-      # 靠系统 Qt。v0.1.0 就是在这儿打的，结果 rpath 指着 runner 的 micromamba
-      # 目录、还要求 Qt_6.11 符号，装到任何发行版上都起不来。它现在归 linux-deb
-      # 那个用发行版 Qt 的 job 打，make-tarball.sh 里也补了拒绝 conda 构建的守卫。
+      # tar.gz **不在这儿打**：它宣称靠系统 Qt，而这个 job 用的是官方 Qt 二进制、
+      # 不装到系统里。它归 linux-deb 那个用发行版 Qt 的 job 打。
       - name: 打 AppImage
-        shell: micromamba-shell {0}
-        run: |
-          # **必须自己 set -e**：micromamba-shell 是自定义 shell，GitHub 不会像对
-          # 内置 bash 那样注入 `set -e`。少了这行，make-appimage.sh 失败之后
-          # 后面照跑、这一步还报成功，最后发出去一个少了 AppImage 的 Release。
-          # 真踩过（v0.1.0-rc1 那次）。
-          set -euo pipefail
-          ./packaging/linux/make-appimage.sh build/release dist
+        run: ./packaging/linux/make-appimage.sh build/release dist
 
       - uses: actions/upload-artifact@v4
         with:
@@ -143,21 +144,21 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: 装工具链（micromamba）
-        uses: mamba-org/setup-micromamba@v2
+      - name: 装 Qt（官方二进制，MSVC 版）
+        uses: jurplel/install-qt-action@v4
         with:
-          environment-name: onvifsim-release
-          create-args: >-
-            qt6-main
-            cmake
-            ninja
-            cxx-compiler
-          # micromamba 的 micromamba-shell 只在 macOS / Linux 上有，Windows 必须走
-          # powershell —— conda 的 MSVC 激活脚本是 .bat，本来也只有它跑得了。
-          init-shell: powershell
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: 装 Ninja
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) { choco install ninja -y }
+          ninja --version
 
       # 同 ci.yml：不进 MSVC 环境的话 CMake 会摸到 runner 预装的 MinGW gcc，
-      # 拿它去链 MSVC 编的 conda Qt，满屏 undefined reference。
+      # 拿它去链 MSVC 编的 Qt，满屏 undefined reference。
       - name: 构建
         shell: pwsh
         run: |
@@ -165,7 +166,6 @@ jobs:
                   -latest -products * -property installationPath
           Import-Module "$vs\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments "-arch=x64"
-          micromamba activate onvifsim-release
           cmake --preset release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
           cmake --build --preset release
 
@@ -177,7 +177,6 @@ jobs:
       - name: 打免安装 zip 与安装包
         shell: pwsh
         run: |
-          micromamba activate onvifsim-release
           # 有安装包就出安装包，Inno Setup 没装上就退回只出免安装 zip。
           try {
               & packaging\windows\make-installer.ps1 -BuildDir build\release -OutputDir dist
@@ -206,26 +205,21 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: 装工具链（micromamba）
-        uses: mamba-org/setup-micromamba@v2
+      - name: 装 Qt（官方二进制）
+        uses: jurplel/install-qt-action@v4
         with:
-          environment-name: onvifsim-release
-          create-args: >-
-            qt6-main
-            cmake
-            ninja
-            cxx-compiler
-          init-shell: bash
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      - name: 装 Ninja
+        run: brew install ninja
 
       - name: 构建
-        shell: micromamba-shell {0}
         run: |
-          set -euo pipefail
           cmake --preset release
           cmake --build --preset release
 
       - name: 打 dmg（ad-hoc 签名）
-        shell: micromamba-shell {0}
         run: ./packaging/macos/make-dmg.sh build/release dist
 
       - uses: actions/upload-artifact@v4

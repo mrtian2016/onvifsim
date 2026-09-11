@@ -44,6 +44,22 @@ CI 六个 job 全绿 —— 因为**没有任何一处跑过打好的包**。六
   退回中文。三个脚本统一走 `onvifsim_install_translations`。
 - macOS bundle 的译文查找路径缺失：新增 `Contents/MacOS/../Resources/i18n`。
 
+### 变更 —— CI 与发版不再走 conda
+
+三平台的 CI 与发版改用**各平台官方的那套**：Qt 用官方二进制
+（`jurplel/install-qt-action`，版本钉在 workflow 顶部的 `QT_VERSION`），编译器用
+runner 自带的（gcc / clang / MSVC）。conda 仍是本机开发的参考环境。
+
+这次三个坏产物里有两个直接由 conda 造成：AppImage 用 conda 的 GCC 15 编，在
+Ubuntu 22.04 上报 `CXXABI_1.3.15 not found`；tar.gz 被排进了那个 conda job。
+此外还有一串旧账：Windows 上 MinGW 抢链 MSVC 编的 conda Qt、
+`micromamba-shell` 在 Windows 上不存在导致步骤按平台硬拆、自定义 shell 不注入
+`set -e` 导致打包失败还绿灯、conda-forge 的 Qt 动态链一串第三方库要打包时自己捞。
+
+换完之后：AppImage 在 ubuntu-22.04 上用 runner 自带的 gcc 编，libstdc++ 的版本
+要求天然就是目标系统那一份，不需要再往包里塞 libstdc++；三平台的构建步骤合成
+一套 `shell: bash`，平台差异走矩阵变量。
+
 ### 新增 —— 守卫
 
 - `packaging/common.sh`：四个打包脚本共用的三道守卫 —— 拒绝 conda 构建、

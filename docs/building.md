@@ -7,8 +7,13 @@ onvifsim 是 C++17 + Qt6，**零第三方库**：XML、HTTP、RTSP、RTP、Diges
 
 | 路径 | 适合谁 | Qt 版本 |
 |---|---|---|
-| **conda** | 开发、CI、想要三平台一致的工具链 | 6.6+（参考环境是 6.11） |
+| **conda** | 本机开发，想要三平台一致的工具链 | 6.6+（参考环境是 6.11） |
 | **发行版自带** | Ubuntu 22.04 / Debian 12 上直接编 | 6.2 / 6.4 |
+| **Qt 官方二进制** | CI 与发版用的就是这条 | workflow 里钉的 `QT_VERSION` |
+
+CI 和发版**不走 conda**：Qt 用官方二进制（`jurplel/install-qt-action`），编译器
+用 runner 自带的。原因见 `CLAUDE.md` 的「GitHub Actions」一节 —— 简单说，拿一个
+跨平台包管理器替代各平台原生工具链，代价比收益大。
 
 ## 硬性约束：Qt 6.2 是下限
 

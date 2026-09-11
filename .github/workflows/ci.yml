@@ -1,7 +1,22 @@
 # 三平台构建 + 单元测试；e2e 只在 Linux 上跑。
 #
-# 工具链用 micromamba 装 conda-forge 的 qt6-main / cmake / ninja / cxx-compiler，
-# 这样三个平台拿到的 Qt 版本一致，也和开发机上的参考环境对得上。
+# 工具链是**各平台官方的那一套**：Qt 用官方二进制（install-qt-action / aqtinstall），
+# 编译器用 runner 自带的（gcc / clang / MSVC）。
+#
+# 原来这里走的是 conda-forge（micromamba + qt6-main + cxx-compiler），图的是
+# 三平台一个 Qt 版本、和开发机对得上。代价比收益大得多，实际付过的账：
+#
+#   - conda Qt 是 MSVC 编的，而 runner 预装了 MinGW gcc，CMake 先摸到后者 →
+#     满屏 `undefined reference to __imp__ZNK9QIODevice`；
+#   - `micromamba-shell` 只在 macOS / Linux 上有，Windows 得另写一套，而
+#     `shell:` 这个键又不吃 matrix 上下文，步骤只能按平台硬拆；
+#   - 自定义 shell 不会被注入 `set -e`，打包脚本失败过一次而 job still green；
+#   - conda 的 GCC 15 编出来的 Qt 要 `CXXABI_1.3.15`，AppImage 拿到
+#     Ubuntu 22.04 上直接起不来（发布 v0.1.0 之后才发现）；
+#   - conda-forge 的 Qt 还动态链着 zlib / pcre2 / zstd / brotli / freetype，
+#     Windows 打包得自己把它们捞出来（官方 Qt 二进制自带）。
+#
+# conda 仍然是**本机开发**的参考环境（见 CLAUDE.md），只是不该出现在 CI 上。
 # 发行版自带 Qt 6.2 那条路由 distro-qt 这个 job 兜住 —— 源码必须能用它编过。
 
 name: CI
@@ -19,6 +34,8 @@ concurrency:
 env:
   # 无界面构建 / 运行都不需要显示器，Qt 自带的 offscreen 插件就够。
   QT_QPA_PLATFORM: offscreen
+  # 官方 Qt 的版本。发版工作流里钉的是同一个，改要一起改。
+  QT_VERSION: '6.8.*'
 
 jobs:
   build:
@@ -27,7 +44,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # `shell:` 不吃 matrix 上下文（Actions 会整份拒绝解析），但 `run:` 吃，
+        # 所以平台差异一律通过 run 里的矩阵变量表达，不要再按平台拆步骤。
+        include:
+          - os: ubuntu-latest
+            cmake_extra: ""
+          - os: windows-latest
+            cmake_extra: "-DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl"
+          - os: macos-latest
+            cmake_extra: ""
 
     steps:
       - uses: actions/checkout@v4
@@ -35,40 +60,29 @@ jobs:
           # cmake/Version.cmake 靠 git describe 取版本号，浅克隆会拿不到 tag。
           fetch-depth: 0
 
-      - name: 装工具链（micromamba）
-        uses: mamba-org/setup-micromamba@v2
+      - name: 装 Qt（官方二进制）
+        uses: jurplel/install-qt-action@v4
         with:
-          environment-name: onvifsim-ci
-          create-args: >-
-            qt6-main
-            cmake
-            ninja
-            cxx-compiler
-          cache-environment: true
-          # **必须带 powershell**：Windows 上 conda 的编译器激活脚本是 .bat，
-          # 只有 cmd / powershell 跑得了；少了它，自定义的 micromamba-shell
-          # 在 Windows runner 上压根不存在（报 command not found）。
-          init-shell: bash powershell
+          version: ${{ env.QT_VERSION }}
+          cache: true
 
-      # 下面构建 / 测试 / 冒烟都分成两套：
-      # micromamba 的 micromamba-shell「只在 macOS 与 Linux 上可用」（上游文档原话），
-      # Windows 必须走 pwsh 并自己 activate 一次 —— 而 `shell:` 这个键**不支持
-      # matrix 上下文**，没法用矩阵变量把两套合成一套（试过，Actions 直接拒解析）。
-      - name: 构建与单测（Unix）
-        if: runner.os != 'Windows'
-        shell: micromamba-shell {0}
+      - name: 装 Ninja
+        shell: bash
         run: |
-          cmake --preset ci
-          cmake --build --preset ci
-          ctest --preset ci
+          set -euo pipefail
+          if command -v ninja >/dev/null 2>&1; then ninja --version; exit 0; fi
+          case "${{ runner.os }}" in
+            Linux)   sudo apt-get update && sudo apt-get install -y ninja-build ;;
+            macOS)   brew install ninja ;;
+            Windows) choco install ninja -y ;;
+          esac
 
-      # Windows 上要显式进 MSVC 环境。不这么做的话，CMake 会在 PATH 上先摸到
-      # runner 预装的 C:\mingw64\bin\gcc，然后拿 MinGW 去链 **MSVC 编出来的**
-      # conda Qt —— 症状是满屏 `undefined reference to __imp__ZNK9QIODevice...`
-      # （GCC 的名字修饰对不上 MSVC 的导入库），看着像缺库，其实是编译器选错了。
-      # 走 vswhere + Enter-VsDevShell，和本机 Windows 上验证过的路子一致，
-      # 不引入第三方 action。
-      - name: 构建与单测（Windows）
+      # Windows 上要显式进 MSVC 环境。不这么做的话 CMake 会在 PATH 上先摸到
+      # runner 预装的 C:\mingw64\bin\gcc，拿 MinGW 去链 MSVC 编的 Qt ——
+      # 症状是满屏 `undefined reference to __imp__ZNK9QIODevice...`，看着像缺库，
+      # 其实是编译器选错了。vswhere + Enter-VsDevShell 把环境变量写进 GITHUB_ENV，
+      # 后面的步骤（包括 bash）就都在 MSVC 环境里了，不用再按平台拆步骤。
+      - name: 进 MSVC 环境（仅 Windows）
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -76,30 +90,33 @@ jobs:
                   -latest -products * -property installationPath
           Import-Module "$vs\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments "-arch=x64"
-          micromamba activate onvifsim-ci
-          # 编译器再显式钉一次：万一 PATH 顺序又变，也不会悄悄换回 gcc。
-          cmake --preset ci -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
+          # 只传 DevShell 真正改动的那几个，不要把整个 env 倒进 $GITHUB_ENV ——
+          # 里面任何一个带换行的值都会把 KEY=VALUE 这个格式冲掉。
+          foreach ($name in 'PATH','INCLUDE','LIB','LIBPATH') {
+              $value = [Environment]::GetEnvironmentVariable($name)
+              if ($value) { "$name=$value" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append }
+          }
+
+      - name: 构建与单测
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 编译器显式钉死：PATH 顺序变了也不会悄悄换回 gcc。
+          cmake --preset ci ${{ matrix.cmake_extra }}
           cmake --build --preset ci
           ctest --preset ci
 
-      - name: 冒烟（Unix）
-        if: runner.os != 'Windows'
-        shell: micromamba-shell {0}
+      - name: 冒烟
+        shell: bash
         run: |
-          ./build/ci/bin/onvifsim --version
-          ./build/ci/bin/onvifsim --list-presets
-          ./build/ci/bin/onvifsim --list-scenarios
-          ./build/ci/bin/onvifsim --list-quirks | tail -n 1
-
-      - name: 冒烟（Windows）
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          micromamba activate onvifsim-ci
-          # GUI 子系统的 onvifsim.exe 在 pwsh 里拿不到控制台，命令行一律用 -cli。
-          build\ci\bin\onvifsim-cli.exe --version
-          build\ci\bin\onvifsim-cli.exe --list-presets
-          build\ci\bin\onvifsim-cli.exe --list-scenarios
+          set -euo pipefail
+          # Windows 上 GUI 子系统的 onvifsim.exe 在命令行里拿不到控制台，用 -cli。
+          exe=build/ci/bin/onvifsim
+          [ -x "${exe}" ] || exe=build/ci/bin/onvifsim-cli.exe
+          "${exe}" --version
+          "${exe}" --list-presets
+          "${exe}" --list-scenarios
+          "${exe}" --list-quirks | tail -n 1
 
       - name: 上传构建产物（失败时便于排查）
         if: failure()
@@ -161,26 +178,21 @@ jobs:
             ffmpeg libgl1 libegl1 libxkbcommon0 libdbus-1-3
           ffprobe -version | head -n 1
 
-      - name: 装工具链（micromamba）
-        uses: mamba-org/setup-micromamba@v2
+      - name: 装 Qt（官方二进制）
+        uses: jurplel/install-qt-action@v4
         with:
-          environment-name: onvifsim-ci
-          create-args: >-
-            qt6-main
-            cmake
-            ninja
-            cxx-compiler
-          cache-environment: true
-          init-shell: bash
+          version: ${{ env.QT_VERSION }}
+          cache: true
+
+      - name: 装 Ninja
+        run: sudo apt-get install -y ninja-build
 
       - name: 构建
-        shell: micromamba-shell {0}
         run: |
           cmake --preset ci
           cmake --build --preset ci
 
       - name: 生成 docs/quirks.md 并检查是否与代码同源
-        shell: micromamba-shell {0}
         run: |
           ONVIFSIM_BINARY=./build/ci/bin/onvifsim ./scripts/gen-docs.sh
           if git ls-files --error-unmatch docs/quirks.md >/dev/null 2>&1; then

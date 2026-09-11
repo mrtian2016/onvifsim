@@ -24,7 +24,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 构建环境
 
-参考工具链是已经建好的 conda 环境 `onvifsim`：
+参考工具链是已经建好的 conda 环境 `onvifsim` —— 这是**本机开发**用的。
+CI 与发版走的是各平台官方的那套（官方 Qt 二进制 + runner 自带编译器），
+理由见下面「GitHub Actions」。
 
 ```bash
 conda activate onvifsim   # Qt 6.11.2 / CMake 4.4.3 / Ninja / GCC 15.3
@@ -226,43 +228,76 @@ HTTP 解析 → HTTP 层鉴权（Basic/Digest，用于快照和厂商私有 API�
 - **TP-Link VIGI 私有 API 的方法名与参数形状是自洽推定的**，`reference-client-facts.md` 只记了「两步 SHA-256」「subscribeMsg」「8 个开关」这些骨架。抓到真机报文后改动只在 `VigiStub::dispatch()` 一处。
 - 二期候选见 `docs/plan.md` §7 末尾：Basic Notification 推送、Profile G 录像回放、H.265、mp4 导入、多播、IPv6、RTSPS/HTTPS、对讲本机回放、TP-Link MULTITRANS。
 
-## GitHub Actions 的坑
+## GitHub Actions
 
-首次发版调了六轮才通，每一条都不是看代码能看出来的：
+### 工具链：官方 Qt，不走 conda
 
-- **改 workflow 先跑 actionlint**，别靠推上去试：
+CI 与发版用**各平台官方的那一套** —— Qt 用官方二进制（`jurplel/install-qt-action`，
+版本钉在两个 workflow 顶部的 `QT_VERSION`），编译器用 runner 自带的
+（gcc / clang / MSVC）。conda 只是**本机开发**的参考环境。
 
-  ```bash
-  docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
-  ```
+原来 CI 也走 conda-forge（micromamba + `qt6-main` + `cxx-compiler`），图的是三平台
+一个 Qt 版本、和开发机对得上。实际付出的账单：
 
-  有一次整个 workflow 被拒绝解析，页面只给一句「workflow file issue」、一个 job
-  都不起、看不出哪一行 —— actionlint 一秒指出是 `shell:` 这个键**不支持 matrix
-  上下文**。
-- **`micromamba-shell` 只在 macOS / Linux 上有**（上游 README 原话）。Windows 必须
-  `shell: pwsh` + 自己 `micromamba activate`，而且因为 `shell:` 不吃 matrix 变量，
-  只能把步骤按 `runner.os` 拆成两套。
-- **自定义 shell 不会自动 `set -e`**。GitHub 只对内置 bash 注入。用
-  `micromamba-shell` 的多命令 run 块必须自己写 `set -euo pipefail` ——
-  踩过一次：AppImage 打包失败，job 照样绿，差点发出去一个少了产物的 Release。
-- **Windows runner 预装了 `C:\mingw64\bin\gcc`**，CMake 在 PATH 上先摸到它，
-  然后拿 MinGW 去链 MSVC 编的 conda Qt，报一屏
-  `undefined reference to __imp__ZNK9QIODevice...`。看着像缺库，其实是编译器选错。
-  必须 vswhere + `Enter-VsDevShell` 再显式 `-DCMAKE_CXX_COMPILER=cl`。
+- conda Qt 是 MSVC 编的，而 Windows runner 预装了 MinGW gcc，CMake 先摸到后者 →
+  满屏 `undefined reference to __imp__ZNK9QIODevice`；
+- `micromamba-shell` 只在 macOS / Linux 上有，Windows 要另写一套；而 `shell:` 这个
+  键又不吃 matrix 上下文，步骤只能按平台硬拆；
+- 自定义 shell 不会被注入 `set -e`，打包脚本失败过一次而 job 照样是绿的；
+- conda 的 GCC 15 编出来的东西要 `CXXABI_1.3.15`，AppImage 拿到 Ubuntu 22.04 上
+  直接起不来 —— 发了 v0.1.0 才发现；
+- conda-forge 的 Qt 还动态链着 zlib / pcre2 / zstd / brotli / freetype，Windows
+  打包得自己把它们捞出来（官方 Qt 二进制自带，`Deploy.cmake` 里那套
+  `GET_RUNTIME_DEPENDENCIES` 就是为它写的）。
+
+五条里没有一条是「conda 本身不好」，都是**拿一个跨平台包管理器去替代各平台原生
+工具链**带来的。教训：CI 上尽量用目标平台自己的那套东西。
+
+**AppImage 必须在支持的最老发行版上构建**（现在钉 ubuntu-22.04 + runner 自带
+gcc）。linuxdeploy 按设计不打包 libstdc++，所以产物对 GLIBCXX 的要求就是构建机
+那一份。
+
+### 改 workflow 先跑 actionlint
+
+别靠推上去试：
+
+```bash
+docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
+```
+
+有一次整个 workflow 被拒绝解析，页面只给一句「workflow file issue」、一个 job
+都不起、看不出哪一行 —— actionlint 一秒指出是 `shell:` 这个键**不支持 matrix
+上下文**。（`run:` 是吃的，所以平台差异一律用 `run` 里的矩阵变量表达，
+例如 `cmake --preset ci ${{ matrix.cmake_extra }}`。）
+
+### 其余几条
+
+- **Windows runner 预装了 `C:\mingw64\bin\gcc`**，CMake 在 PATH 上先摸到它就会
+  拿 MinGW 去链 MSVC 编的 Qt，报一屏 `undefined reference to __imp__...`。看着像
+  缺库，其实是编译器选错。必须 vswhere + `Enter-VsDevShell`，再显式
+  `-DCMAKE_CXX_COMPILER=cl`。DevShell 改完的环境写进 `$GITHUB_ENV`，后面的步骤
+  （包括 `shell: bash`）就都在 MSVC 环境里了。
 - **`download-artifact` 无差别全收会挂**：docker/build-push-action 自己会传一个
   `<owner>~<repo>~XXXX.dockerbuild` 空产物，下到它就
   `Artifact download failed after 5 retries`。用 `pattern` 按名字挑。
-- **系统依赖**：AppImage 的 `linuxdeploy-plugin-qt` 解依赖要 `libegl1` / `libgl1`；
-  发行版 Qt 那条要 `qt6-l10n-tools`（`qt6-tools-dev` 只给 CMake 配置、
-  不给 lconvert 的二进制）和 `libgl1-mesa-dev`（Qt6Gui 的 WrapOpenGL）。
+- **系统依赖**：AppImage 的 `linuxdeploy-plugin-qt` 解依赖要 `libegl1` / `libgl1`，
+  跑冒烟还要 `fuse` / `libfuse2`；发行版 Qt 那条要 `qt6-l10n-tools`
+  （`qt6-tools-dev` 只给 CMake 配置、不给 lconvert 的二进制）、
+  `libgl1-mesa-dev`（Qt6Gui 的 WrapOpenGL）和 `qt6-qpa-plugins`（打包脚本的冒烟要
+  加载 offscreen 平台插件，而它在装 deb 之前就跑了）。
 - **发布前有一道产物清单校验**（publish job 里）。六个产物逐条点名，少哪个报哪个。
-  `set -e` 只能管住已知的脚本，这道管的是最终结果 —— 加它的直接原因就是上面
-  那次「绿灯但少了 AppImage」。
+  `set -e` 只能管住已知的脚本，这道管的是最终结果 —— 加它的直接原因就是那次
+  「绿灯但少了 AppImage」。
 
-发版流程本身：改 `CHANGELOG.md` 的版本段标题为 `## [X.Y.Z] - 日期`（publish 是按
-这个抽发布说明的），然后 `git tag -a vX.Y.Z && git push origin vX.Y.Z`。
-**先用 `-rc` 结尾的 tag 试跑** —— workflow 认这个后缀会标成 prerelease，
-出了问题删掉重来，不会在 Release 页面留下一个残缺的正式版本。
+### 发版流程
+
+改 `CHANGELOG.md` 的版本段标题为 `## [X.Y.Z] - 日期`（publish 是按这个抽发布说明
+的），然后 `git tag -a vX.Y.Z && git push origin vX.Y.Z`。
+
+**先用 `-rc` 结尾的 tag 试跑** —— workflow 认这个后缀会标成 prerelease，出了问题
+删掉重来，不会在 Release 页面留下一个残缺的正式版本。这条不是形式主义：v0.1.1 的
+第一次 rc 就在 AppImage 上红了，而那个缺陷本机复现不出来（开发机的 libstdc++ 比
+目标系统新）。
 
 ## 这轮复核定下来的几条规矩
 
