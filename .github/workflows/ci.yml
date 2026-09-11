@@ -117,9 +117,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Windows 上 GUI 子系统的 onvifsim.exe 在命令行里拿不到控制台，用 -cli。
-          exe=build/ci/bin/onvifsim
-          [ -x "${exe}" ] || exe=build/ci/bin/onvifsim-cli.exe
+          # 三个平台三种落点：
+          #   Linux    bin/onvifsim
+          #   macOS    bin/onvifsim.app/Contents/MacOS/onvifsim   （MACOSX_BUNDLE）
+          #   Windows  bin/onvifsim-cli.exe  （GUI 子系统的 exe 在命令行拿不到控制台）
+          #
+          # 这一步原来只写了第一种，macOS 上其实一直在报 "No such file or directory"
+          # —— 但当时用的是 micromamba-shell，自定义 shell 不会被注入 `set -e`，
+          # 于是整个步骤照样绿。换成 shell: bash 之后当场暴露。
+          for candidate in build/ci/bin/onvifsim \
+                           build/ci/bin/onvifsim.app/Contents/MacOS/onvifsim \
+                           build/ci/bin/onvifsim-cli.exe; do
+            if [ -x "${candidate}" ]; then exe="${candidate}"; break; fi
+          done
+          if [ -z "${exe:-}" ]; then
+            echo "::error::build/ci/bin 下找不到可执行文件"; ls -R build/ci/bin; exit 1
+          fi
+          echo "跑的是 ${exe}"
           "${exe}" --version
           "${exe}" --list-presets
           "${exe}" --list-scenarios

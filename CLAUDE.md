@@ -277,6 +277,12 @@ docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
   缺库，其实是编译器选错。必须 vswhere + `Enter-VsDevShell`，再显式
   `-DCMAKE_CXX_COMPILER=cl`。DevShell 改完的环境写进 `$GITHUB_ENV`，后面的步骤
   （包括 `shell: bash`）就都在 MSVC 环境里了。
+- **自定义 shell（`micromamba-shell` 之类）不会被注入 `set -e`。** GitHub 只对内置
+  bash 注入。这条咬过两次：AppImage 打包失败而 job 全绿，差点发出去少了产物的
+  Release；CI 里 macOS 的冒烟步骤路径写错（`bin/onvifsim`，可 macOS 产的是
+  `bin/onvifsim.app/Contents/MacOS/onvifsim`），报了几个月的
+  "No such file or directory" 而没人知道。现在一律 `shell: bash` + 自己写
+  `set -euo pipefail`。
 - **`download-artifact` 无差别全收会挂**：docker/build-push-action 自己会传一个
   `<owner>~<repo>~XXXX.dockerbuild` 空产物，下到它就
   `Artifact download failed after 5 retries`。用 `pattern` 按名字挑。
