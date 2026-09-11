@@ -27,19 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # micromamba 的自定义 shell「只在 macOS 与 Linux 上可用」（上游文档原话），
-          # Windows 只能走 pwsh —— 而且 conda 的 MSVC 激活脚本是 .bat，
-          # 本来也只有 cmd / powershell 跑得了。
-          - os: ubuntu-latest
-            shell: micromamba-shell {0}
-            activate: ""
-          - os: macos-latest
-            shell: micromamba-shell {0}
-            activate: ""
-          - os: windows-latest
-            shell: pwsh
-            activate: "micromamba activate onvifsim-ci"
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -62,27 +50,30 @@ jobs:
           # 在 Windows runner 上压根不存在（报 command not found）。
           init-shell: bash powershell
 
-      - name: 配置
-        shell: ${{ matrix.shell }}
+      # 下面构建 / 测试 / 冒烟都分成两套：
+      # micromamba 的 micromamba-shell「只在 macOS 与 Linux 上可用」（上游文档原话），
+      # Windows 必须走 pwsh 并自己 activate 一次 —— 而 `shell:` 这个键**不支持
+      # matrix 上下文**，没法用矩阵变量把两套合成一套（试过，Actions 直接拒解析）。
+      - name: 构建与单测（Unix）
+        if: runner.os != 'Windows'
+        shell: micromamba-shell {0}
         run: |
-          ${{ matrix.activate }}
           cmake --preset ci
-
-      - name: 构建（-Werror）
-        shell: ${{ matrix.shell }}
-        run: |
-          ${{ matrix.activate }}
           cmake --build --preset ci
+          ctest --preset ci
 
-      - name: 单元测试
-        shell: ${{ matrix.shell }}
+      - name: 构建与单测（Windows）
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          ${{ matrix.activate }}
+          micromamba activate onvifsim-ci
+          cmake --preset ci
+          cmake --build --preset ci
           ctest --preset ci
 
       - name: 冒烟（Unix）
         if: runner.os != 'Windows'
-        shell: ${{ matrix.shell }}
+        shell: micromamba-shell {0}
         run: |
           ./build/ci/bin/onvifsim --version
           ./build/ci/bin/onvifsim --list-presets
@@ -93,7 +84,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          ${{ matrix.activate }}
+          micromamba activate onvifsim-ci
           # GUI 子系统的 onvifsim.exe 在 pwsh 里拿不到控制台，命令行一律用 -cli。
           build\ci\bin\onvifsim-cli.exe --version
           build\ci\bin\onvifsim-cli.exe --list-presets

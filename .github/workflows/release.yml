@@ -254,7 +254,7 @@ jobs:
 
       - name: 生成校验和
         working-directory: dist
-        run: sha256sum * > SHA256SUMS.txt
+        run: sha256sum -- * > SHA256SUMS.txt
 
       - name: 从 CHANGELOG 抽出这个版本的段落
         id: notes
