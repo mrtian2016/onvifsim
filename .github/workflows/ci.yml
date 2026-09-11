@@ -62,12 +62,23 @@ jobs:
           cmake --build --preset ci
           ctest --preset ci
 
+      # Windows 上要显式进 MSVC 环境。不这么做的话，CMake 会在 PATH 上先摸到
+      # runner 预装的 C:\mingw64\bin\gcc，然后拿 MinGW 去链 **MSVC 编出来的**
+      # conda Qt —— 症状是满屏 `undefined reference to __imp__ZNK9QIODevice...`
+      # （GCC 的名字修饰对不上 MSVC 的导入库），看着像缺库，其实是编译器选错了。
+      # 走 vswhere + Enter-VsDevShell，和本机 Windows 上验证过的路子一致，
+      # 不引入第三方 action。
       - name: 构建与单测（Windows）
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+                  -latest -products * -property installationPath
+          Import-Module "$vs\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments "-arch=x64"
           micromamba activate onvifsim-ci
-          cmake --preset ci
+          # 编译器再显式钉一次：万一 PATH 顺序又变，也不会悄悄换回 gcc。
+          cmake --preset ci -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
           cmake --build --preset ci
           ctest --preset ci
 

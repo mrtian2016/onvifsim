@@ -133,11 +133,17 @@ jobs:
           # powershell —— conda 的 MSVC 激活脚本是 .bat，本来也只有它跑得了。
           init-shell: powershell
 
+      # 同 ci.yml：不进 MSVC 环境的话 CMake 会摸到 runner 预装的 MinGW gcc，
+      # 拿它去链 MSVC 编的 conda Qt，满屏 undefined reference。
       - name: 构建
         shell: pwsh
         run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+                  -latest -products * -property installationPath
+          Import-Module "$vs\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments "-arch=x64"
           micromamba activate onvifsim-release
-          cmake --preset release
+          cmake --preset release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
           cmake --build --preset release
 
       - name: 装 Inno Setup（做引导式安装包用）
