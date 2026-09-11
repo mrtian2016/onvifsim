@@ -315,13 +315,22 @@ jobs:
       - name: 从 CHANGELOG 抽出这个版本的段落
         id: notes
         run: |
+          set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
-          if [ -f CHANGELOG.md ]; then
-            awk -v v="$version" '
-              /^## \[/ { if (found) exit; if (index($0, "[" v "]")) { found=1; next } }
-              found { print }
-            ' CHANGELOG.md > release-notes.md
-          fi
+          # 预发布 tag（0.1.0-rc3）在 CHANGELOG 里没有自己的段落，退回基础版本
+          # 0.1.0 的那一段 —— 否则用 rc 试跑时永远验不到「发布说明取得对不对」，
+          # 而那正是试跑要验的东西之一。
+          base="${version%%-*}"
+          : > release-notes.md
+          for candidate in "$version" "$base"; do
+            if [ -f CHANGELOG.md ]; then
+              awk -v v="$candidate" '
+                /^## \[/ { if (found) exit; if (index($0, "[" v "]")) { found=1; next } }
+                found { print }
+              ' CHANGELOG.md > release-notes.md
+            fi
+            [ -s release-notes.md ] && break
+          done
           if [ ! -s release-notes.md ]; then
             echo "本次发布的变更见 CHANGELOG.md。" > release-notes.md
           fi

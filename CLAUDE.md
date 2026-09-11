@@ -196,6 +196,44 @@ HTTP 解析 → HTTP 层鉴权（Basic/Digest，用于快照和厂商私有 API�
 - **TP-Link VIGI 私有 API 的方法名与参数形状是自洽推定的**，`reference-client-facts.md` 只记了「两步 SHA-256」「subscribeMsg」「8 个开关」这些骨架。抓到真机报文后改动只在 `VigiStub::dispatch()` 一处。
 - 二期候选见 `docs/plan.md` §7 末尾：Basic Notification 推送、Profile G 录像回放、H.265、mp4 导入、多播、IPv6、RTSPS/HTTPS、对讲本机回放、TP-Link MULTITRANS。
 
+## GitHub Actions 的坑
+
+首次发版调了六轮才通，每一条都不是看代码能看出来的：
+
+- **改 workflow 先跑 actionlint**，别靠推上去试：
+
+  ```bash
+  docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
+  ```
+
+  有一次整个 workflow 被拒绝解析，页面只给一句「workflow file issue」、一个 job
+  都不起、看不出哪一行 —— actionlint 一秒指出是 `shell:` 这个键**不支持 matrix
+  上下文**。
+- **`micromamba-shell` 只在 macOS / Linux 上有**（上游 README 原话）。Windows 必须
+  `shell: pwsh` + 自己 `micromamba activate`，而且因为 `shell:` 不吃 matrix 变量，
+  只能把步骤按 `runner.os` 拆成两套。
+- **自定义 shell 不会自动 `set -e`**。GitHub 只对内置 bash 注入。用
+  `micromamba-shell` 的多命令 run 块必须自己写 `set -euo pipefail` ——
+  踩过一次：AppImage 打包失败，job 照样绿，差点发出去一个少了产物的 Release。
+- **Windows runner 预装了 `C:\mingw64\bin\gcc`**，CMake 在 PATH 上先摸到它，
+  然后拿 MinGW 去链 MSVC 编的 conda Qt，报一屏
+  `undefined reference to __imp__ZNK9QIODevice...`。看着像缺库，其实是编译器选错。
+  必须 vswhere + `Enter-VsDevShell` 再显式 `-DCMAKE_CXX_COMPILER=cl`。
+- **`download-artifact` 无差别全收会挂**：docker/build-push-action 自己会传一个
+  `<owner>~<repo>~XXXX.dockerbuild` 空产物，下到它就
+  `Artifact download failed after 5 retries`。用 `pattern` 按名字挑。
+- **系统依赖**：AppImage 的 `linuxdeploy-plugin-qt` 解依赖要 `libegl1` / `libgl1`；
+  发行版 Qt 那条要 `qt6-l10n-tools`（`qt6-tools-dev` 只给 CMake 配置、
+  不给 lconvert 的二进制）和 `libgl1-mesa-dev`（Qt6Gui 的 WrapOpenGL）。
+- **发布前有一道产物清单校验**（publish job 里）。六个产物逐条点名，少哪个报哪个。
+  `set -e` 只能管住已知的脚本，这道管的是最终结果 —— 加它的直接原因就是上面
+  那次「绿灯但少了 AppImage」。
+
+发版流程本身：改 `CHANGELOG.md` 的版本段标题为 `## [X.Y.Z] - 日期`（publish 是按
+这个抽发布说明的），然后 `git tag -a vX.Y.Z && git push origin vX.Y.Z`。
+**先用 `-rc` 结尾的 tag 试跑** —— workflow 认这个后缀会标成 prerelease，
+出了问题删掉重来，不会在 Release 页面留下一个残缺的正式版本。
+
 ## 这轮复核定下来的几条规矩
 
 开源前做过一次全量工程规范复核，下面几条是从中提炼的、以后要一直守住的：

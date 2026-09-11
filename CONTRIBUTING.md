@@ -70,6 +70,24 @@ cd tests/e2e && .venv/bin/python -m pytest -q \
 If you touched the GUI, also run `tests/e2e/test_gui_stream.py`. The protocol tests run
 headless and never execute a line of interface code, which has hidden a crash before.
 
+## Touching the workflows
+
+Run actionlint before pushing — a bad expression makes GitHub reject the whole file
+and the UI only says "workflow file issue" without telling you which line:
+
+```bash
+docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
+```
+
+Two traps worth knowing, both of which cost a debugging round here:
+
+- `micromamba-shell` exists only on macOS and Linux; Windows steps use `pwsh` plus an
+  explicit `micromamba activate`. And `shell:` does not accept matrix variables, so the
+  two cannot be collapsed into one step.
+- A custom `shell:` does **not** get `set -e` injected. Any multi-command `run:` block
+  using `micromamba-shell` needs its own `set -euo pipefail`, or a failing packaging
+  script leaves the job green.
+
 ## Style
 
 `.editorconfig` covers it: four spaces for C++, two for CMake/JSON/YAML/Markdown, LF,
