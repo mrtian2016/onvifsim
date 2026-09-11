@@ -129,11 +129,14 @@ jobs:
             cmake
             ninja
             cxx-compiler
-          init-shell: bash powershell
+          # micromamba 的 micromamba-shell 只在 macOS / Linux 上有，Windows 必须走
+          # powershell —— conda 的 MSVC 激活脚本是 .bat，本来也只有它跑得了。
+          init-shell: powershell
 
       - name: 构建
-        shell: micromamba-shell {0}
+        shell: pwsh
         run: |
+          micromamba activate onvifsim-release
           cmake --preset release
           cmake --build --preset release
 
@@ -143,10 +146,16 @@ jobs:
         continue-on-error: true   # winget 在 runner 上偶尔抽风，装不上就只出 zip
 
       - name: 打免安装 zip 与安装包
-        shell: micromamba-shell {0}
+        shell: pwsh
         run: |
-          pwsh -File packaging/windows/make-installer.ps1 -BuildDir build/release -OutputDir dist ||
-            pwsh -File packaging/windows/make-portable.ps1 -BuildDir build/release -OutputDir dist
+          micromamba activate onvifsim-release
+          # 有安装包就出安装包，Inno Setup 没装上就退回只出免安装 zip。
+          try {
+              & packaging\windows\make-installer.ps1 -BuildDir build\release -OutputDir dist
+          } catch {
+              Write-Host "安装包没做成（$_），退回免安装 zip"
+              & packaging\windows\make-portable.ps1 -BuildDir build\release -OutputDir dist
+          }
 
       - name: 清掉打包用的中间目录（只留 zip 与 setup.exe）
         shell: bash

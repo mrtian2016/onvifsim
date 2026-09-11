@@ -38,8 +38,10 @@ onvifsim_add_test(tst_vendor)
 
 onvifsim_add_test(tst_model)
 
-# 翻译覆盖：要读构建出来的 .qm，所以依赖翻译目标。
-if(Qt6LinguistTools_FOUND)
+# 翻译覆盖：要读构建出来的 .qm（由 src/gui 的 onvifsim-translations 产出），
+# 还要扫 src/gui 的源码，所以 BUILD_GUI=OFF 时整条都不成立 —— 少了这个条件，
+# 无界面构建会在 add_dependencies 上直接报「目标不存在」。
+if(BUILD_GUI AND Qt6LinguistTools_FOUND)
     onvifsim_add_test(tst_i18n)
     add_dependencies(tst_i18n onvifsim-translations)
     # guiNeverShowsRawCoreStrings 要扫 src/gui 的源码，把路径编进去。

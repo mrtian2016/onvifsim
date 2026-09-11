@@ -27,7 +27,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          # micromamba 的自定义 shell「只在 macOS 与 Linux 上可用」（上游文档原话），
+          # Windows 只能走 pwsh —— 而且 conda 的 MSVC 激活脚本是 .bat，
+          # 本来也只有 cmd / powershell 跑得了。
+          - os: ubuntu-latest
+            shell: micromamba-shell {0}
+            activate: ""
+          - os: macos-latest
+            shell: micromamba-shell {0}
+            activate: ""
+          - os: windows-latest
+            shell: pwsh
+            activate: "micromamba activate onvifsim-ci"
 
     steps:
       - uses: actions/checkout@v4
@@ -51,20 +63,26 @@ jobs:
           init-shell: bash powershell
 
       - name: 配置
-        shell: micromamba-shell {0}
-        run: cmake --preset ci
+        shell: ${{ matrix.shell }}
+        run: |
+          ${{ matrix.activate }}
+          cmake --preset ci
 
       - name: 构建（-Werror）
-        shell: micromamba-shell {0}
-        run: cmake --build --preset ci
+        shell: ${{ matrix.shell }}
+        run: |
+          ${{ matrix.activate }}
+          cmake --build --preset ci
 
       - name: 单元测试
-        shell: micromamba-shell {0}
-        run: ctest --preset ci
+        shell: ${{ matrix.shell }}
+        run: |
+          ${{ matrix.activate }}
+          ctest --preset ci
 
       - name: 冒烟（Unix）
         if: runner.os != 'Windows'
-        shell: micromamba-shell {0}
+        shell: ${{ matrix.shell }}
         run: |
           ./build/ci/bin/onvifsim --version
           ./build/ci/bin/onvifsim --list-presets
@@ -73,11 +91,13 @@ jobs:
 
       - name: 冒烟（Windows）
         if: runner.os == 'Windows'
-        shell: micromamba-shell {0}
+        shell: pwsh
         run: |
-          build\ci\bin\onvifsim.exe --version
-          build\ci\bin\onvifsim.exe --list-presets
-          build\ci\bin\onvifsim.exe --list-scenarios
+          ${{ matrix.activate }}
+          # GUI 子系统的 onvifsim.exe 在 pwsh 里拿不到控制台，命令行一律用 -cli。
+          build\ci\bin\onvifsim-cli.exe --version
+          build\ci\bin\onvifsim-cli.exe --list-presets
+          build\ci\bin\onvifsim-cli.exe --list-scenarios
 
       - name: 上传构建产物（失败时便于排查）
         if: failure()
