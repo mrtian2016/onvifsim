@@ -266,6 +266,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          # **按名字挑**，不要无差别全收：docker/build-push-action 会自己额外传一个
+          # `<owner>~<repo>~XXXX.dockerbuild` 的产物，体积是 0，
+          # download-artifact 下到它就直接 `Artifact download failed after 5 retries`
+          # 整步挂掉（踩过）。顺带也保证不会有多余文件混进 Release 的附件列表。
+          pattern: "{linux,linux-deb,windows,macos}"
           merge-multiple: true
 
       - name: 列一下产物
