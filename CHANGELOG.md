@@ -12,7 +12,7 @@
 
 （暂无）
 
-## [0.1.1] - 2026-09-11
+## [0.1.1] - 2026-09-12
 
 **打包修复版。程序本身与 0.1.0 无差别**，改的全是「包装」。
 
@@ -72,6 +72,15 @@ Ubuntu 22.04 上报 `CXXABI_1.3.15 not found`；tar.gz 被排进了那个 conda 
     执行里面的二进制，恰好绕开唯一出问题的那条路径。
 - 界面译文一个都没加载上时，`GuiEntry.cpp` 会 `qWarning` 报出来并列出找过的
   目录。在此之前这是完全无声的，这正是四个产物集体漏 `.qm` 没人发现的原因。
+
+### 已知问题
+
+- **AppImage 需要宿主上有 libGL**（`apt install libgl1`）。linuxdeploy 按设计不打包
+  OpenGL —— 驱动必须用宿主的，打进去反而会在别的机器上坏掉。桌面发行版都自带，
+  但丢进纯净的服务器 / 容器里会是
+  `error while loading shared libraries: libGLX.so.0`。那种场景用
+  `ghcr.io/mrtian2016/onvifsim` 这个镜像更合适。这条 0.1.0 就有，不是本版引入。
+- AppImage 要求 glibc ≥ 2.34（Ubuntu 22.04 / Debian 12 / RHEL 9 及以后）。
 
 ## [0.1.0] - 2026-09-11
 
