@@ -19,6 +19,9 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 build_dir="${1:-${repo_root}/build/deb}"
 output_dir="${2:-${repo_root}/dist}"
 
+# shellcheck source=packaging/common.sh
+. "${repo_root}/packaging/common.sh"
+
 for tool in dpkg-deb dpkg-shlibdeps fakeroot; do
     command -v "${tool}" >/dev/null 2>&1 || {
         echo "缺少 ${tool}：sudo apt install dpkg-dev fakeroot" >&2
@@ -35,12 +38,7 @@ fi
 
 # conda 的 Qt 会把 rpath 指到环境目录里，装到别人机器上必然找不到库。
 # 与其打出一个装完不能用的包，不如在这里就拦下来。
-if readelf -d "${binary}" 2>/dev/null | grep -qE "R(UN)?PATH.*(conda|miniforge|mamba)"; then
-    echo "这个二进制链接的是 conda 的 Qt（rpath 指向 conda 环境），不能拿来打 deb。" >&2
-    echo "用发行版的 Qt 重新构建：" >&2
-    echo "  cmake -S . -B build/deb -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF" >&2
-    exit 1
-fi
+onvifsim_reject_conda_build "${binary}" "deb"
 
 version_full="$("${binary}" --version 2>/dev/null | awk '{print $2}')"
 [ -n "${version_full}" ] || { echo "取不到版本号" >&2; exit 1; }
@@ -66,11 +64,7 @@ strip --strip-unneeded "${root}/usr/bin/onvifsim"
 install -d "${root}/usr/share/onvifsim/scenarios"
 install -m644 "${repo_root}"/assets/scenarios/*.json "${root}/usr/share/onvifsim/scenarios/"
 
-# 翻译是可选的：没装 Qt 的 Linguist 工具时构建会跳过 .qm，界面退回中文源字串。
-if compgen -G "${build_dir}/bin/i18n/*.qm" >/dev/null; then
-    install -d "${root}/usr/share/onvifsim/i18n"
-    install -m644 "${build_dir}"/bin/i18n/*.qm "${root}/usr/share/onvifsim/i18n/"
-fi
+onvifsim_install_translations "${build_dir}" "${root}/usr/share/onvifsim/i18n"
 
 install -Dm644 "${repo_root}/packaging/linux/onvifsim.desktop" \
                "${root}/usr/share/applications/onvifsim.desktop"
@@ -159,6 +153,10 @@ EOF
 # md5sums 让 dpkg --verify 和 debsums 能查出被改过的文件。
 (cd "${root}" && find usr -type f -print0 | sort -z \
     | xargs -0 md5sum > DEBIAN/md5sums)
+
+# 打包之前先跑一遍暂存目录里那份（剥过符号表、按 /usr 布局摆好的那个）。
+# CI 里还会再装一遍真包，但这道在本地就能挡住。
+onvifsim_smoke_test "${root}/usr/bin/onvifsim" "deb"
 
 mkdir -p "${output_dir}"
 deb="${output_dir}/${pkg_name}.deb"

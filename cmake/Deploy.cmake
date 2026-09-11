@@ -42,6 +42,33 @@ function(onvifsim_find_deploy_tool out_var name)
     set(${out_var} "${${out_var}}" PARENT_SCOPE)
 endfunction()
 
+# Qt 的插件目录在哪。先问 qtpaths，问不到就按部署工具的位置往上猜几个常见布局
+# （conda-forge 是 <prefix>/lib/qt6/plugins，官方安装器是 <prefix>/plugins）。
+function(onvifsim_qt_plugin_root out_var deploy_tool)
+    set(_root "")
+    onvifsim_find_deploy_tool(ONVIFSIM_QTPATHS qtpaths6 qtpaths)
+    if(ONVIFSIM_QTPATHS)
+        execute_process(COMMAND "${ONVIFSIM_QTPATHS}" --query QT_INSTALL_PLUGINS
+                        OUTPUT_VARIABLE _root
+                        OUTPUT_STRIP_TRAILING_WHITESPACE
+                        ERROR_QUIET)
+    endif()
+    if(NOT _root OR NOT EXISTS "${_root}")
+        get_filename_component(_qt_bin "${deploy_tool}" DIRECTORY)
+        get_filename_component(_qt_prefix "${_qt_bin}" DIRECTORY)
+        set(_root "")
+        foreach(_candidate "${_qt_prefix}/lib/qt6/plugins"
+                           "${_qt_prefix}/plugins"
+                           "${_qt_prefix}/share/qt6/plugins")
+            if(EXISTS "${_candidate}")
+                set(_root "${_candidate}")
+                break()
+            endif()
+        endforeach()
+    endif()
+    set(${out_var} "${_root}" PARENT_SCOPE)
+endfunction()
+
 # ---------------------------------------------------------------------------
 # Windows：windeployqt 把 Qt 的 DLL、平台插件、样式插件拷到可执行文件旁边。
 # 结果是一个解压即跑的便携目录。
@@ -90,19 +117,7 @@ endfunction()
 # "Could not find the Qt platform plugin offscreen"，而且这个错只在
 # 真正跑 --headless 时才暴露，--version 那条路径不碰它。
 function(onvifsim_copy_windows_platform_plugins destination)
-    set(_plugin_root "")
-    if(ONVIFSIM_QTPATHS)
-        execute_process(COMMAND "${ONVIFSIM_QTPATHS}" --query QT_INSTALL_PLUGINS
-                        OUTPUT_VARIABLE _plugin_root
-                        OUTPUT_STRIP_TRAILING_WHITESPACE
-                        ERROR_QUIET)
-    endif()
-    if(NOT _plugin_root OR NOT EXISTS "${_plugin_root}")
-        # qtpaths 问不到就按 conda 的布局猜一把。
-        get_filename_component(_qt_bin "${ONVIFSIM_WINDEPLOYQT}" DIRECTORY)
-        get_filename_component(_qt_prefix "${_qt_bin}" DIRECTORY)
-        set(_plugin_root "${_qt_prefix}/lib/qt6/plugins")
-    endif()
+    onvifsim_qt_plugin_root(_plugin_root "${ONVIFSIM_WINDEPLOYQT}")
 
     # qminimal 一并带上：某些受限环境（无窗口站的服务账号）连 offscreen 都起不来时还能兜底。
     foreach(_plugin qoffscreen qminimal)
@@ -199,6 +214,75 @@ function(onvifsim_copy_windows_runtime_deps binary destination)
 endfunction()
 
 # ---------------------------------------------------------------------------
+# macOS：macdeployqt 只收它认为图形程序用得上的 cocoa 平台插件。可 `--headless`
+# 会把 QT_QPA_PLATFORM 设成 offscreen（快照要 QGuiApplication + QPainter 画字），
+# 少了它，.app 里的无界面模式一启动就是
+#   qt.qpa.plugin: Could not find the Qt platform plugin "offscreen"
+# 然后直接 abort。Windows 那边早就显式补了 qoffscreen.dll、Linux 靠
+# EXTRA_PLATFORM_PLUGINS 补，**只有 macOS 这条一直漏着** —— v0.1.0 的 dmg
+# 就是这么发出去的。
+# ---------------------------------------------------------------------------
+function(onvifsim_copy_macos_platform_plugins bundle)
+    onvifsim_qt_plugin_root(_plugin_root "${ONVIFSIM_MACDEPLOYQT}")
+    if(NOT _plugin_root)
+        message(WARNING "问不到 Qt 插件目录，跳过补 offscreen 插件；.app 的 --headless 会起不来")
+        return()
+    endif()
+
+    # qminimal 一并带上：某些受限环境里连 offscreen 都起不来时还能兜底。
+    foreach(_plugin libqoffscreen libqminimal)
+        set(_src "${_plugin_root}/platforms/${_plugin}.dylib")
+        if(EXISTS "${_src}")
+            file(COPY "${_src}" DESTINATION "${bundle}/Contents/PlugIns/platforms")
+            message(STATUS "  补平台插件: ${_plugin}.dylib")
+        elseif(_plugin STREQUAL "libqoffscreen")
+            message(FATAL_ERROR
+                "Qt 插件目录里没有 ${_src} —— 没有它 .app 的 --headless 起不来。")
+        endif()
+    endforeach()
+endfunction()
+
+# bundle 里的二进制只允许依赖三类路径：@rpath / @executable_path / @loader_path
+# 开头的（bundle 内部）、/usr/lib 和 /System（系统自带）。剩下的一律是构建机上的
+# 绝对路径 —— 本机跑没事，别人下下来就是「打不开」，而且报错里不会说是哪个库。
+function(onvifsim_check_macos_bundle_paths bundle)
+    find_program(ONVIFSIM_OTOOL otool)
+    if(NOT ONVIFSIM_OTOOL)
+        message(WARNING "找不到 otool，跳过 bundle 路径体检")
+        return()
+    endif()
+
+    file(GLOB_RECURSE _binaries "${bundle}/Contents/PlugIns/*.dylib")
+    get_filename_component(_bundle_name "${bundle}" NAME_WE)
+    list(APPEND _binaries "${bundle}/Contents/MacOS/${_bundle_name}")
+
+    set(_bad "")
+    foreach(_bin IN LISTS _binaries)
+        execute_process(COMMAND "${ONVIFSIM_OTOOL}" -L "${_bin}"
+                        OUTPUT_VARIABLE _out OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        string(REPLACE "\n" ";" _lines "${_out}")
+        list(POP_FRONT _lines)          # 第一行是文件名自己，不是依赖
+        foreach(_line IN LISTS _lines)
+            string(STRIP "${_line}" _line)
+            string(REGEX REPLACE " \\(compatibility.*" "" _dep "${_line}")
+            if(_dep STREQUAL "")
+                continue()
+            endif()
+            if(_dep MATCHES "^@" OR _dep MATCHES "^/usr/lib/" OR _dep MATCHES "^/System/")
+                continue()
+            endif()
+            list(APPEND _bad "${_bin}: ${_dep}")
+        endforeach()
+    endforeach()
+
+    if(_bad)
+        string(REPLACE ";" "\n  " _bad_text "${_bad}")
+        message(FATAL_ERROR
+            "bundle 里有指向构建机的绝对路径，换台机器就加载不了：\n  ${_bad_text}")
+    endif()
+endfunction()
+
+# ---------------------------------------------------------------------------
 # macOS：macdeployqt 打 .app，然后 **ad-hoc 签名**。
 # ad-hoc（codesign -s -）不需要开发者账号，签完本机双击就能开，
 # 只是别的机器上首次打开仍要右键「打开」。没有签名的话 arm64 上直接起不来。
@@ -211,11 +295,21 @@ function(onvifsim_deploy_macos bundle)
     endif()
     message(STATUS "macdeployqt: ${ONVIFSIM_MACDEPLOYQT}")
 
+    # **必须在 macdeployqt 之前**把 offscreen 插件放进去：macdeployqt 会把它在
+    # bundle 里找到的每个二进制的依赖路径改写成 @executable_path/../Frameworks，
+    # 事后再拷进去的那份不会被改写，仍然指着构建机上 conda 的绝对路径 ——
+    # 在本机测一切正常，换台机器就加载不了。
+    onvifsim_copy_macos_platform_plugins("${bundle}")
+
     set(_args "${bundle}" -always-overwrite)
     execute_process(COMMAND "${ONVIFSIM_MACDEPLOYQT}" ${_args} RESULT_VARIABLE _result)
     if(NOT _result EQUAL 0)
         message(FATAL_ERROR "macdeployqt 失败：${_result}")
     endif()
+
+    # 体检：bundle 里不该再有指向构建机的绝对路径。上面那条「先拷再 deploy」的
+    # 顺序要求是靠这道检查兜底的 —— 顺序写反了本机照样跑得通，只有别人的机器会坏。
+    onvifsim_check_macos_bundle_paths("${bundle}")
 
     # ad-hoc 签名。--deep 是刻意的：macdeployqt 塞进来的框架也要一起签，
     # 否则 Gatekeeper 会因为「签名不完整」拒绝加载。

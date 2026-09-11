@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **`docs/plan.md` 的 M0–M7 已全部实现并验证通过。** 约 34000 行 C++、90 条故障注入、8 个品牌预设、Qt Widgets 界面，Linux / Windows / macOS 三平台构建与打包均已验证。
 
-**仓库还没有任何一次 commit** —— 所有文件都在工作区里。提交前先问用户。
+仓库已经开源在 `github.com/mrtian2016/onvifsim`，发过 v0.1.0。
+**提交与推送前先问用户**，别自己 commit。
 
 `docs/plan.md`（中文）仍是权威设计稿：目标与非目标、对象模型、各模块详细设计、里程碑。改动前先读它，按它的结构走；觉得某个决定不对就说出来，别闷头偏离。`docs/reference-client-facts.md` 是它背后的实证依据。`plan.md` §9 那 7 个「待拍板」的实际结论记在 `CHANGELOG.md` 的「设计取舍」一节。
 
@@ -118,7 +119,11 @@ HTTP 解析 → HTTP 层鉴权（Basic/Digest，用于快照和厂商私有 API�
 - **macOS 上 Command Line Tools 与 Xcode 各带一套 SDK**，`xcrun` 默认用 CLT 那套。CLT 比 Xcode 新时（实测 macOS 27：CLT 给 `MacOSX27.0.sdk`、Xcode 里最新才 `26.5`），SDK 里的新架构标记 `arm64e.x1` 会让 linker 报 `tapi error: malformed file` —— 连 hello world 都编不过，跟项目无关。显式 `-DCMAKE_OSX_SYSROOT=<Xcode 的 SDK>` 绕过，详见 `docs/building.md`。
 - **两个 `.qrc` 不能同名**：`qInitResources_<基名>` 会撞车。`src/core/scenarios.qrc` 与 `src/media/assets.qrc` 就是为此改的名。
 - **linuxdeploy-plugin-qt 默认只收 `xcb` 一个平台插件**，而 `--headless` 会把 `QT_QPA_PLATFORM` 设成 `offscreen`（快照要 `QGuiApplication`）。结果是 AppImage 的无界面模式在**任何**机器上都报 `Could not find the Qt platform plugin "offscreen"` —— 偏偏 AppImage 正是最可能被丢进无头服务器 / CI 的那一份。`make-appimage.sh` 里靠 `EXTRA_PLATFORM_PLUGINS` 补 `libqoffscreen.so;libqminimal.so`。
-- **`.deb` 必须用发行版的 Qt 构建**，不能用 conda 的。deb 的 `Depends` 是 `dpkg-shlibdeps` 从二进制实际链接的 `.so` 反推的；拿 conda Qt 6.11 编出来的程序打包，反推出的依赖是错的，装到只有 Qt 6.4 的系统上直接起不来，而 dpkg 对这种错配毫无察觉。`make-deb.sh` 里有一道 rpath 检查会拒绝 conda 构建。
+- **linuxdeploy 生成的 `AppRun` 是个裸符号链接，对 Qt 程序不够用。** 它让 Qt 全靠 `usr/bin/qt.conf` 定位插件；可经 AppImage 运行时启动时，传给程序的 `argv[0]` 是 `.AppImage` 文件自己的路径，Qt 据此算出的「程序所在目录」落在用户下载 AppImage 的那个目录上 —— qt.conf 找不到，插件搜索路径是空的，**图形模式和 `--headless` 一起死**（`Could not find the Qt platform plugin "offscreen" in ""`）。`make-appimage.sh` 因此分两步：先填 AppDir，写一个导出 `QT_PLUGIN_PATH=$APPDIR/usr/plugins` 的 AppRun 包装脚本，再 `--output appimage`（linuxdeploy 见到已有 AppRun 会跳过，日志里是 `Existing AppRun detected`）。
+  这个坑最毒的地方是**三种「验证」方式全都验不出来**：`--appimage-extract` 后跑解包的二进制、挂载后直接跑 `AppRun`、手工设 `QT_PLUGIN_PATH`，在坏包上统统正常 —— 只有用户实际用的那一种是坏的。v0.1.0 就是这么发出去的。
+- **`.deb` 与 `.tar.gz` 都必须用发行版的 Qt 构建**，不能用 conda 的 —— 这两个包都不带 Qt 运行时。deb 的 `Depends` 是 `dpkg-shlibdeps` 从二进制实际链接的 `.so` 反推的；拿 conda Qt 6.11 编出来的程序打包，反推出的依赖是错的，装到只有 Qt 6.4 的系统上直接起不来，而 dpkg 对这种错配毫无察觉。tar.gz 更直接：conda 构建要求 `Qt_6.11` 版本化符号、rpath 还指着构建机的 conda 目录，解到别人机器上就是 `libQt6Core.so.6: version 'Qt_6.11' not found`。两个脚本里都有 `onvifsim_reject_conda_build`（`packaging/common.sh`）。
+  v0.1.0 的 tar.gz 正是这么坏的：守卫当时只写在 `make-deb.sh` 里，于是 `release.yml` 顺手把 tar.gz 排进了 conda 那个 job。**同一条约束落在两个产物上，守卫就要放在两个产物都经过的地方。**
+- **macOS 的 `.app` 也要补 `libqoffscreen.dylib`。** macdeployqt 只收 cocoa，`.app` 里的 `--headless` 会和 AppImage 报一模一样的错。Windows 那边早就显式拷了 `qoffscreen.dll`、Linux 靠 `EXTRA_PLATFORM_PLUGINS`，**只有 macOS 这条一直漏着**（v0.1.0 的 dmg 中招）。补的位置很讲究：**必须在 macdeployqt 之前拷进 bundle**，否则那份插件的依赖路径不会被改写成 `@executable_path/../Frameworks`，仍指着构建机上 conda 的绝对路径 —— 本机测一切正常，换台机器才坏。`Deploy.cmake` 里 `onvifsim_check_macos_bundle_paths` 用 `otool -L` 兜住这一条。
 - **`QSettings` 里存过的值会让改默认值失效**。托盘默认从「关」改成「开」时，老用户的配置里躺着旧的 `false`，表现就是「说好的新行为呢」。改任何默认值都要配一次性迁移（见 `MainWindow` 里的 `ui/trayDefaultV2`），只对新装的机器改默认是不够的。
 
 ### 日志级别：协议握手不是错误
@@ -142,6 +147,31 @@ HTTP 解析 → HTTP 层鉴权（Basic/Digest，用于快照和厂商私有 API�
 
 - 界面里任何 `refresh()` ↔ `reloadXxx()` 的互调都要有**重入保护**，比较的两个数必须是同一个口径；
 - 改了界面里读会话 / 订阅 / 统计的代码，跑一遍 `tests/e2e/test_gui_stream.py`。
+
+### 打包产物是第二个盲区
+
+单测只链 `onvifsim-core`，e2e 跑的是构建目录里的二进制，CI 验的是「能不能编、
+测过没过」。**没有任何一处跑过打好的包。** v0.1.0 发出去六个产物，三个起不来，
+六个 job 全绿。唯一完好的 `.deb` 恰恰是唯一在 CI 里装了再跑一遍的那个。
+
+所以四个打包脚本（deb / tar.gz / AppImage / dmg）和 `make-portable.ps1` 在产物
+封口之前都要跑一遍产物本身：`--version`，再 `--headless` 起 5 秒看它还活着。
+共用实现在 `packaging/common.sh` 的 `onvifsim_smoke_test`。**改打包脚本不要把它
+绕过去。**
+
+两个容易把这道守卫写成摆设的地方（都当场踩过）：
+
+- **只跑 `--version` 等于没跑。** 它走不到 `QGuiApplication`，缺平台插件照样正常
+  打印版本号 —— 坏掉的 AppImage 就是 `--version` 好好的、一进 `--headless` 直接
+  core dump。
+- **AppImage 必须去掉 `APPIMAGE_EXTRACT_AND_RUN`**（`make-appimage.sh` 自己为
+  linuxdeploy 那几个工具导出过它）。带着它跑，AppImage 会自解压再执行里面的
+  二进制，恰好绕开唯一会出问题的那条路径。`onvifsim_smoke_test` 里统一用
+  `env -u` 摘掉。
+
+同一个道理也适用于「静默回落」类的缺陷：`.qm` 漏打包不会报错，只会让英文界面
+显示中文。`GuiEntry.cpp` 现在在译文一个都没加载上时会 `qWarning` 出来，并把找过
+的目录一并打印。
 
 ## Linux 产物
 

@@ -4,6 +4,7 @@
 #include "gui/GuiUtil.h"
 #include "gui/MainWindow.h"
 
+#include <QtCore/QDebug>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QLibraryInfo>
@@ -19,7 +20,7 @@ namespace gui {
 namespace {
 
 // 翻译文件的查找顺序：内嵌资源 → 可执行文件旁的 i18n/ → 安装前缀下的 share/ →
-// 构建目录（开发期直接跑 build/bin/onvifsim 时用）。
+// macOS bundle 的 Resources/ → 构建目录（开发期直接跑 build/bin/onvifsim 时用）。
 QStringList translationDirectories()
 {
     QStringList dirs;
@@ -27,6 +28,9 @@ QStringList translationDirectories()
     const QString appDir = QCoreApplication::applicationDirPath();
     dirs.append(appDir + QStringLiteral("/i18n"));
     dirs.append(appDir + QStringLiteral("/../share/onvifsim/i18n"));
+    // .app 里可执行文件在 Contents/MacOS，资源按惯例放 Contents/Resources。
+    // 不加这条的话 dmg 版切成英文会静默退回中文（QTranslator 找不到译文不报错）。
+    dirs.append(appDir + QStringLiteral("/../Resources/i18n"));
 #ifdef ONVIFSIM_I18N_BUILD_DIR
     dirs.append(QStringLiteral(ONVIFSIM_I18N_BUILD_DIR));
 #endif
@@ -62,6 +66,17 @@ void installTranslators(QApplication &app)
         }
     }
     delete appTranslator;
+
+    // 中文环境下这没关系（源字串就是中文）。但在英文环境下，它意味着整个界面
+    // 会**静默**地显示中文 —— QTranslator 加载不到译文不报任何错。
+    // 打包漏掉 .qm 是真发生过的事故：v0.1.0 的 AppImage / tar.gz / dmg 三个产物
+    // 全漏了，而且是发出去之后才发现的。所以这里得自己喊一声。
+    if (locale.language() != QLocale::Chinese) {
+        qWarning().noquote()
+            << "No onvifsim translation for locale" << locale.name()
+            << "- the UI will fall back to its Chinese source strings. Looked in:"
+            << dirs.join(QLatin1String(", "));
+    }
 }
 
 } // namespace

@@ -10,13 +10,22 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 build_dir="${1:-${repo_root}/build/release}"
 output_dir="${2:-${repo_root}/dist}"
 
+# shellcheck source=packaging/common.sh
+. "${repo_root}/packaging/common.sh"
+
 binary="${build_dir}/bin/onvifsim"
 [ -x "${binary}" ] || binary="${build_dir}/onvifsim"
 if [ ! -x "${binary}" ]; then
-    echo "找不到可执行文件，先构建：cmake --preset release && cmake --build --preset release" >&2
+    echo "找不到可执行文件，先构建：cmake -S . -B build/deb -G Ninja -DCMAKE_BUILD_TYPE=Release" >&2
     echo "（找过 ${build_dir}/bin/onvifsim 与 ${build_dir}/onvifsim）" >&2
     exit 1
 fi
+
+# 这一份靠系统 Qt，所以和 deb 一样不能拿 conda 的构建来打。
+# v0.1.0 的 tar.gz 就是这么坏的：拿 conda Qt 6.11 编出来，rpath 指向 CI runner
+# 的 micromamba 目录，装到任何发行版上都是 `version 'Qt_6.11' not found`。
+# deb 那边早有这道守卫，这边一直没有 —— 于是 release.yml 顺手把它排进了 conda 那个 job。
+onvifsim_reject_conda_build "${binary}" "tar.gz"
 
 version="$("${binary}" --version | awk '{print $2}')"
 name="onvifsim-${version}-linux-x86_64"
@@ -26,6 +35,8 @@ trap 'rm -rf "${stage}"' EXIT
 mkdir -p "${stage}/${name}/bin" "${stage}/${name}/share"
 cp "${binary}" "${stage}/${name}/bin/"
 cp -r "${repo_root}/assets/scenarios" "${stage}/${name}/share/scenarios"
+# 运行期查的是 <可执行文件>/../share/onvifsim/i18n，所以译文要多一层 onvifsim/。
+onvifsim_install_translations "${build_dir}" "${stage}/${name}/share/onvifsim/i18n"
 cp "${repo_root}/packaging/linux/onvifsim.desktop" "${stage}/${name}/share/"
 cp "${repo_root}/assets/logo/onvifsim.svg" "${stage}/${name}/share/"
 
@@ -57,6 +68,9 @@ onvifsim —— ONVIF 摄像头模拟器（Linux 便携版）
 
 想要下载即跑、不装任何东西的，用 AppImage 那一份。
 TXT
+
+# 从暂存目录里跑一遍，验的是解出来的那份（相对路径、share/ 布局都和用户拿到的一样）。
+onvifsim_smoke_test "${stage}/${name}/bin/onvifsim" "tar.gz"
 
 mkdir -p "${output_dir}"
 tar -czf "${output_dir}/${name}.tar.gz" -C "${stage}" "${name}"

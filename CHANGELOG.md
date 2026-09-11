@@ -12,6 +12,51 @@
 
 （暂无）
 
+## [0.1.1] - 2026-09-11
+
+**打包修复版。程序本身与 0.1.0 无差别**，改的全是「包装」。
+
+0.1.0 发出去的六个产物里有三个起不来、四个漏了英文译文，而单元测试、端到端、
+CI 六个 job 全绿 —— 因为**没有任何一处跑过打好的包**。六个产物里唯一完好的
+`.deb`，恰恰是唯一在 CI 里装了再跑一遍的那个。这一版把缺陷和缺口一起补上。
+
+0.1.0 的 AppImage / tar.gz / dmg 已从 Release 页面撤下，请用这一版。
+`.deb` 与两个 Windows 包不受影响。
+
+### 修复 —— 产物
+
+- **AppImage 完全起不来**（图形与 `--headless` 都是）：`Could not find the Qt
+  platform plugin "offscreen" in ""`。linuxdeploy 生成的 `AppRun` 是指向可执行
+  文件的裸符号链接，Qt 全靠 `usr/bin/qt.conf` 定位插件；而经 AppImage 运行时
+  启动时传给程序的 `argv[0]` 是 `.AppImage` 文件本身的路径，Qt 算出的「程序所在
+  目录」落在用户下载 AppImage 的那个目录上，qt.conf 找不到，插件搜索路径为空。
+  改成自带一个导出 `QT_PLUGIN_PATH=$APPDIR/usr/plugins` 的 AppRun 包装脚本。
+- **tar.gz 在任何发行版上都起不来**：`libQt6Core.so.6: version 'Qt_6.11' not
+  found`。它宣称靠系统 Qt，却被排在 CI 里用 conda Qt 6.11 的那个 job 打，rpath
+  还指着构建机的 micromamba 目录。改由用发行版 Qt 的 job 打，并给
+  `make-tarball.sh` 补上和 `make-deb.sh` 同样的拒绝 conda 构建的守卫。
+- **macOS `.app` 的 `--headless` 起不来**：macdeployqt 只收 cocoa 平台插件，
+  缺 `libqoffscreen.dylib`（Windows 与 Linux 早就分别补过，只有 macOS 漏着）。
+  补在 macdeployqt **之前**，这样插件的依赖路径会被一起改写成
+  `@executable_path/../Frameworks`；另加一道 `otool -L` 体检，确保 bundle 里
+  不残留任何指向构建机的绝对路径。
+- **AppImage / tar.gz / dmg 都漏了 `onvifsim_*.qm`**，切成英文时整个界面静默
+  退回中文。三个脚本统一走 `onvifsim_install_translations`。
+- macOS bundle 的译文查找路径缺失：新增 `Contents/MacOS/../Resources/i18n`。
+
+### 新增 —— 守卫
+
+- `packaging/common.sh`：四个打包脚本共用的三道守卫 —— 拒绝 conda 构建、
+  装译文、**冒烟跑一遍产物本身**（`--version` 之后再 `--headless` 起 5 秒看它
+  还活着）。Windows 的 `make-portable.ps1` 里有等价实现，`make-installer.ps1`
+  会调用它，两个 Windows 包都覆盖。
+  - 只跑 `--version` 是验不出东西的：它走不到 `QGuiApplication`，缺平台插件
+    照样正常打印版本号。
+  - AppImage 的冒烟必须摘掉 `APPIMAGE_EXTRACT_AND_RUN` —— 带着它跑会自解压再
+    执行里面的二进制，恰好绕开唯一出问题的那条路径。
+- 界面译文一个都没加载上时，`GuiEntry.cpp` 会 `qWarning` 报出来并列出找过的
+  目录。在此之前这是完全无声的，这正是四个产物集体漏 `.qm` 没人发现的原因。
+
 ## [0.1.0] - 2026-09-11
 
 首个可用版本。从零实现了 `docs/plan.md` 里的 M0–M7 全部里程碑。

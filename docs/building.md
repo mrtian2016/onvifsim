@@ -189,19 +189,25 @@ cmake --preset headless && cmake --build --preset headless
 cmake --preset release && cmake --build --preset release
 ```
 
-**`make-deb.sh` 是例外，它必须用发行版的 Qt 构建**，不能用 conda 的那份：
+**`make-deb.sh` 与 `make-tarball.sh` 是例外，它们必须用发行版的 Qt 构建**，
+不能用 conda 的那份 —— 这两个包都不带 Qt 运行时：
 
 ```bash
 sudo apt install qt6-base-dev qt6-tools-dev qt6-l10n-tools dpkg-dev fakeroot
 cmake -S . -B build/deb -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
 cmake --build build/deb
-./packaging/linux/make-deb.sh build/deb dist
+./packaging/linux/make-deb.sh     build/deb dist
+./packaging/linux/make-tarball.sh build/deb dist
 ```
 
 deb 的 `Depends` 是 `dpkg-shlibdeps` 从二进制实际链接的 `.so` 反推出来的。
 拿 conda Qt 6.11 编出来的程序去打包，反推出的依赖是错的，装到只有 Qt 6.4 的
-系统上会直接起不来 —— 而 dpkg 对这种错配毫无察觉。脚本里有一道 rpath 检查，
-发现 conda 的痕迹就直接拒绝，免得打出一个装完不能用的包。
+系统上会直接起不来 —— 而 dpkg 对这种错配毫无察觉。tar.gz 更直接：conda 构建
+要求 `Qt_6.11` 这样的版本化符号、rpath 还指着构建机的 conda 目录，解到别人
+机器上一跑就是 `libQt6Core.so.6: version 'Qt_6.11' not found`。
+两个脚本里都有一道 rpath 检查，发现 conda 的痕迹就直接拒绝。
+
+v0.1.0 的 tar.gz 正是漏了这道检查发出去的（当时守卫只在 deb 那边有）。
 
 部署工具（windeployqt / macdeployqt / linuxdeploy）的调用统一封在
 `cmake/Deploy.cmake` 里，三个脚本共用同一份逻辑。它既能当 CMake 模块 `include()`，
@@ -231,7 +237,30 @@ xattr -dr com.apple.quarantine /Applications/onvifsim.app
 | `.tar.gz` | `make-tarball.sh` | 解压即用的便携目录，靠系统 Qt。给要塞进自己脚本里的人 |
 
 三份都带 `assets/logo/` 里的图标：AppImage 由 linuxdeploy 内嵌，deb 与 tar.gz
-铺 `share/icons/hicolor/` 目录树。
+铺 `share/icons/hicolor/` 目录树。三份也都带 `share/onvifsim/i18n/*.qm`，
+漏了英文界面会静默退回中文。
+
+---
+
+## 打包脚本里的冒烟守卫
+
+四个打包脚本（deb / tar.gz / AppImage / dmg，以及 Windows 的
+`make-portable.ps1`）在产物封口之前都会**跑一遍产物本身**：先 `--version`，
+再 `--headless` 起 5 秒看它还活着。失败就不出包。共用实现在
+`packaging/common.sh`。
+
+这道守卫是 v0.1.0 之后补的。那次六个产物里三个起不来（AppImage 的 Qt 插件
+路径、tar.gz 的 conda Qt、dmg 缺 offscreen 插件），而单测、e2e、CI 全绿 ——
+因为没有任何一处跑过打好的产物。唯一完好的 `.deb`，恰恰是唯一在 CI 里装了
+再跑一遍的那个。
+
+两个容易把守卫写成摆设的地方：
+
+- **只跑 `--version` 等于没跑。** 它走不到 `QGuiApplication`，缺平台插件照样
+  打印版本号。必须跑 `--headless` —— 它会加载 offscreen 平台插件，和图形模式
+  走同一条查找路径。
+- **AppImage 要去掉 `APPIMAGE_EXTRACT_AND_RUN`。** 带着它跑，AppImage 会自解压
+  再执行里面的二进制，恰好绕开「经运行时挂载启动」这条唯一会出问题的路径。
 
 ---
 

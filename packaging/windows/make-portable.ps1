@@ -111,6 +111,35 @@ onvifsim —— ONVIF 摄像头模拟器（Windows 免安装版）
   否则局域网里的客户端发现不到，也拉不了流。
 "@ | Set-Content -Path (Join-Path $stage "README-FIRST.txt") -Encoding UTF8
 
+# 跑一遍打好的目录本身，再决定要不要压成 zip。
+#
+# 只跑 --version 是白跑的：它走不到 QGuiApplication，缺 qoffscreen.dll 或少个
+# 第三方 DLL 照样正常打印版本号。--headless 会构造 QGuiApplication 并加载
+# offscreen 平台插件，才踩得到那条路。Linux / macOS 的打包脚本里有同一道守卫
+# （packaging/common.sh），起因是 v0.1.0 发出去三个起不来的产物。
+$smokeExe = Join-Path $stage "onvifsim-cli.exe"
+if (-not (Test-Path $smokeExe)) { $smokeExe = Join-Path $stage "onvifsim.exe" }
+
+& $smokeExe --version | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "冒烟失败：$smokeExe --version 跑不起来" }
+
+$smokeOut = Join-Path $env:TEMP "onvifsim-smoke-out.txt"
+$smokeErr = Join-Path $env:TEMP "onvifsim-smoke-err.txt"
+# 端口挑 48000 段，避开默认的 8000 / 8554 / 9000，免得和本机跑着的实例撞上。
+$smokeArgs = @('--headless','--cameras','1','--no-discovery',
+               '--http-port','48000','--rtsp-port','48554','--control-port','49000')
+$proc = Start-Process -FilePath $smokeExe -PassThru -NoNewWindow `
+    -ArgumentList $smokeArgs `
+    -RedirectStandardOutput $smokeOut -RedirectStandardError $smokeErr
+Start-Sleep -Seconds 5
+if ($proc.HasExited) {
+    Get-Content $smokeOut,$smokeErr -ErrorAction SilentlyContinue | Write-Host
+    throw "冒烟失败：--headless 起来就退了（退出码 $($proc.ExitCode)），它本该一直跑着"
+}
+Stop-Process -Id $proc.Id -Force
+Remove-Item $smokeOut,$smokeErr -ErrorAction SilentlyContinue
+Write-Host "冒烟通过：便携目录"
+
 New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
 $zip = Join-Path $outputPath "$name.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }

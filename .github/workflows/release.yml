@@ -63,7 +63,11 @@ jobs:
           cmake --preset release
           cmake --build --preset release
 
-      - name: 打 AppImage 与 tar.gz
+      # tar.gz **不在这儿打**：这个 job 用的是 conda 的 Qt 6.11，而 tar.gz 宣称
+      # 靠系统 Qt。v0.1.0 就是在这儿打的，结果 rpath 指着 runner 的 micromamba
+      # 目录、还要求 Qt_6.11 符号，装到任何发行版上都起不来。它现在归 linux-deb
+      # 那个用发行版 Qt 的 job 打，make-tarball.sh 里也补了拒绝 conda 构建的守卫。
+      - name: 打 AppImage
         shell: micromamba-shell {0}
         run: |
           # **必须自己 set -e**：micromamba-shell 是自定义 shell，GitHub 不会像对
@@ -72,7 +76,6 @@ jobs:
           # 真踩过（v0.1.0-rc1 那次）。
           set -euo pipefail
           ./packaging/linux/make-appimage.sh build/release dist
-          ./packaging/linux/make-tarball.sh build/release dist
 
       - uses: actions/upload-artifact@v4
         with:
@@ -97,7 +100,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-l10n-tools \
             libgl1-mesa-dev \
-            cmake ninja-build g++ dpkg-dev fakeroot lintian
+            cmake ninja-build g++ dpkg-dev fakeroot lintian \
+            qt6-qpa-plugins
+          # qt6-qpa-plugins 是给**打包脚本里的冒烟**用的：它在封包前会跑一遍
+          # `--headless`，那一步要加载 offscreen 平台插件。装 deb 的时候它会作为
+          # 依赖被带进来，但冒烟发生在那之前。
 
       - name: 构建（系统 Qt）
         run: |
@@ -106,6 +113,10 @@ jobs:
 
       - name: 打 deb
         run: ./packaging/linux/make-deb.sh build/deb dist
+
+      # tar.gz 和 deb 一样靠系统 Qt，所以跟着这个 job 走。
+      - name: 打 tar.gz
+        run: ./packaging/linux/make-tarball.sh build/deb dist
 
       - name: 装一遍再卸一遍，确认包是好的
         run: |
@@ -121,7 +132,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: linux-deb
-          path: dist/*.deb
+          path: dist/*
 
   windows:
     name: Windows 产物
