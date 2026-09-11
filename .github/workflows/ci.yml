@@ -51,7 +51,14 @@ jobs:
             cmake_extra: ""
           - os: windows-latest
             cmake_extra: "-DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl"
-          - os: macos-latest
+          # **钉 macos-14，不要用 macos-latest。** Qt 6.8 LTS 的官方 macOS 二进制
+          # 是用还带 AGL 框架的 SDK 构建的，它的 CMake 配置里因此留着
+          # `-framework AGL`；而 macos-latest 现在是 Xcode 16（SDK 15），AGL 已被
+          # 删除，链接期直接 `ld: framework 'AGL' not found`。AGL 是早就废弃的老
+          # OpenGL 胶水，本项目一行都不用，纯粹是 Qt 预编译包带出来的。
+          # 发版的 macOS job 本来就钉 macos-14（要 Apple Silicon），两边保持一致。
+          # 等 macos-14 下线时，把 QT_VERSION 抬到 6.9+（那批是用 Xcode 16 构建的）。
+          - os: macos-14
             cmake_extra: ""
 
     steps:
