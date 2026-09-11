@@ -1,0 +1,38 @@
+# onvifsim 端到端测试的独立依赖集。
+#
+# 刻意与 C++ 主体的 conda 环境分开：这里装的是「参照客户端同款的库」，
+# 版本必须钉死 —— 测试的价值就在于复现那个客户端的解析行为。
+# 建 venv 与安装见 README.md。
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onvifsim-e2e"
+version = "0.1.0"
+description = "onvifsim 端到端测试（pytest + onvif-zeep + wsdiscovery + ffprobe）"
+requires-python = ">=3.9"
+dependencies = [
+  # 参照客户端同款版本，不要升。onvif-zeep 按官方 WSDL 严格解析响应，
+  # 字段错就抛异常，正好当手写 XML 的 schema 校验器用。
+  "onvif-zeep==0.2.12",
+  "zeep==4.3.2",
+  "wsdiscovery==2.1.2",
+  "requests>=2.31",
+  "pytest>=7.4",
+]
+
+# 这个项目本身不安装任何包，只用来解析依赖；测试代码从仓库里直接导入。
+[tool.setuptools]
+packages = []
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+addopts = "-ra --strict-markers"
+markers = [
+  "discovery: 需要 WS-Discovery 多播（容器 / CI 里可能不通，可用 -m 'not discovery' 跳过）",
+  "stream: 需要 ffprobe 真的拉流，慢",
+  "slow: 单条用时超过 5 秒",
+  "quirk: 故障注入断言",
+]

@@ -1,0 +1,211 @@
+# 三平台构建 + 单元测试；e2e 只在 Linux 上跑。
+#
+# 工具链用 micromamba 装 conda-forge 的 qt6-main / cmake / ninja / cxx-compiler，
+# 这样三个平台拿到的 Qt 版本一致，也和开发机上的参考环境对得上。
+# 发行版自带 Qt 6.2 那条路由 distro-qt 这个 job 兜住 —— 源码必须能用它编过。
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 无界面构建 / 运行都不需要显示器，Qt 自带的 offscreen 插件就够。
+  QT_QPA_PLATFORM: offscreen
+
+jobs:
+  build:
+    name: 构建与单测 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # cmake/Version.cmake 靠 git describe 取版本号，浅克隆会拿不到 tag。
+          fetch-depth: 0
+
+      - name: 装工具链（micromamba）
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: onvifsim-ci
+          create-args: >-
+            qt6-main
+            cmake
+            ninja
+            cxx-compiler
+          cache-environment: true
+          init-shell: bash
+
+      - name: 配置
+        shell: micromamba-shell {0}
+        run: cmake --preset ci
+
+      - name: 构建（-Werror）
+        shell: micromamba-shell {0}
+        run: cmake --build --preset ci
+
+      - name: 单元测试
+        shell: micromamba-shell {0}
+        run: ctest --preset ci
+
+      - name: 冒烟（Unix）
+        if: runner.os != 'Windows'
+        shell: micromamba-shell {0}
+        run: |
+          ./build/ci/bin/onvifsim --version
+          ./build/ci/bin/onvifsim --list-presets
+          ./build/ci/bin/onvifsim --list-scenarios
+          ./build/ci/bin/onvifsim --list-quirks | tail -n 1
+
+      - name: 冒烟（Windows）
+        if: runner.os == 'Windows'
+        shell: micromamba-shell {0}
+        run: |
+          build\ci\bin\onvifsim.exe --version
+          build\ci\bin\onvifsim.exe --list-presets
+          build\ci\bin\onvifsim.exe --list-scenarios
+
+      - name: 上传构建产物（失败时便于排查）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ matrix.os }}
+          path: |
+            build/ci/CMakeCache.txt
+            build/ci/Testing/**
+          if-no-files-found: ignore
+
+  distro-qt:
+    # 硬性约束：源码必须能用 Qt 6.2 / CMake 3.21 / C++17 编过。
+    # Ubuntu 22.04 自带的正是 Qt 6.2，这个 job 就是那条底线的看门人。
+    name: 发行版 Qt 6.2 (Ubuntu 22.04)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 装系统 Qt6 与构建工具
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build \
+            qt6-base-dev qt6-base-dev-tools qt6-tools-dev qt6-tools-dev-tools \
+            libgl1-mesa-dev
+
+      - name: 配置（不带 GUI 也过一遍，容器镜像走的就是这条）
+        run: |
+          cmake -S . -B build/distro -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_WERROR=ON
+          cmake -S . -B build/distro-headless -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_WERROR=ON -DBUILD_GUI=OFF
+
+      - name: 构建
+        run: |
+          cmake --build build/distro
+          cmake --build build/distro-headless
+
+      - name: 单元测试
+        run: ctest --test-dir build/distro --output-on-failure
+
+  e2e:
+    name: 端到端 (Linux)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 装 ffmpeg（要的是 ffprobe）与 Qt offscreen 插件的运行期依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg libgl1 libegl1 libxkbcommon0 libdbus-1-3
+          ffprobe -version | head -n 1
+
+      - name: 装工具链（micromamba）
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: onvifsim-ci
+          create-args: >-
+            qt6-main
+            cmake
+            ninja
+            cxx-compiler
+          cache-environment: true
+          init-shell: bash
+
+      - name: 构建
+        shell: micromamba-shell {0}
+        run: |
+          cmake --preset ci
+          cmake --build --preset ci
+
+      - name: 生成 docs/quirks.md 并检查是否与代码同源
+        shell: micromamba-shell {0}
+        run: |
+          ONVIFSIM_BINARY=./build/ci/bin/onvifsim ./scripts/gen-docs.sh
+          if git ls-files --error-unmatch docs/quirks.md >/dev/null 2>&1; then
+            git diff --exit-code -- docs/quirks.md \
+              || { echo "::error::docs/quirks.md 与 Quirks 表不一致，跑 scripts/gen-docs.sh 后提交"; exit 1; }
+          else
+            echo "docs/quirks.md 还没入库，本次只生成不校验"
+          fi
+
+      - name: 装 e2e 依赖
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: pip install
+        working-directory: tests/e2e
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: 跑 e2e（不含多播）
+        working-directory: tests/e2e
+        env:
+          ONVIFSIM_BINARY: ${{ github.workspace }}/build/ci/bin/onvifsim
+        run: pytest -m "not discovery" --durations=15
+
+      - name: 跑 e2e 的多播用例（跑不通不阻塞）
+        working-directory: tests/e2e
+        continue-on-error: true
+        env:
+          ONVIFSIM_BINARY: ${{ github.workspace }}/build/ci/bin/onvifsim
+        run: pytest -m discovery --durations=10
+
+      - name: 上传 e2e 失败现场
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: /tmp/pytest-of-runner/**/onvifsim.*.log
+          if-no-files-found: ignore
+
+  docker:
+    name: 容器镜像
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 构建 headless 镜像
+        run: docker build -f packaging/docker/Dockerfile -t onvifsim:ci .
+
+      - name: 冒烟
+        run: docker run --rm onvifsim:ci --version

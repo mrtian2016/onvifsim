@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!--
+    16 / 20 / 24 px 用的简化版：去掉发现环和高光，加粗镜筒描边，
+    否则细节在小尺寸下糊成一团噪点。make-icons.sh 用它生成小尺寸位图。
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#1E4266"/>
+      <stop offset="1" stop-color="#0A1523"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="256" height="256" rx="58" fill="url(#bg)"/>
+  <circle cx="128" cy="128" r="74" fill="#0A1523" stroke="#EAF2F8" stroke-width="12"/>
+  <g>
+    <path d="M128.0 68.0 L180.0 98.0 L145.0 129.2 L137.5 113.9 Z" fill="#EAF2F8"/>
+    <path d="M180.0 98.0 L180.0 158.0 L135.5 143.3 L145.0 129.2 Z" fill="#A9C3D6"/>
+    <path d="M180.0 158.0 L128.0 188.0 L118.5 142.1 L135.5 143.3 Z" fill="#EAF2F8"/>
+    <path d="M128.0 188.0 L76.0 158.0 L111.0 126.8 L118.5 142.1 Z" fill="#A9C3D6"/>
+    <path d="M76.0 158.0 L76.0 98.0 L120.5 112.7 L111.0 126.8 Z" fill="#EAF2F8"/>
+    <path d="M76.0 98.0 L128.0 68.0 L137.5 113.9 L120.5 112.7 Z" fill="#A9C3D6"/>
+  </g>
+  <circle cx="128" cy="128" r="19" fill="#38BDF8"/>
+</svg>

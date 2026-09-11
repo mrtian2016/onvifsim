@@ -1,0 +1,36 @@
+name: 真机行为 / Real camera behavior
+description: 一台真相机做了 onvifsim 复现不了的事。这是最有价值的一类 issue。
+labels: ["quirk-candidate"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        每一条故障注入开关都来自一次真实观测。你手上这台相机的怪毛病，
+        就是一条带证据的功能请求 —— 不用写代码。
+
+        Every fault-injection switch exists because a real device behaved that way.
+        You do not need to write any code; the observation is the contribution.
+  - type: input
+    id: device
+    attributes:
+      label: 设备 / Device
+      placeholder: 厂商、型号、固件版本
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 设备做了什么 / What the device does
+      description: |
+        报文最好。抓包、SOAP body、RTSP 交互都行，截一段就够。
+        **请先去掉序列号、主机名、内网地址这些。**
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: client
+    attributes:
+      label: 客户端因此出了什么问题 / How the client breaks
+      placeholder: 搜不到设备？取流黑屏？报错还是静默失败？
+    validations:
+      required: true

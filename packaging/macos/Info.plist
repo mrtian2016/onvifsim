@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>onvifsim</string>
+  <key>CFBundleDisplayName</key>
+  <string>onvifsim</string>
+  <key>CFBundleIdentifier</key>
+  <string>org.onvifsim.onvifsim</string>
+  <key>CFBundleExecutable</key>
+  <string>onvifsim</string>
+  <key>CFBundleIconFile</key>
+  <string>onvifsim.icns</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleSignature</key>
+  <string>????</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@ONVIFSIM_VERSION_SHORT@</string>
+  <key>CFBundleVersion</key>
+  <string>@ONVIFSIM_VERSION_FULL@</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>11.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSHumanReadableCopyright</key>
+  <string>MIT License</string>
+
+  <!-- 模拟器要在局域网里被发现、被取流，macOS 14 起必须声明本地网络用途，
+       否则 WS-Discovery 的多播会被系统静默拦掉，客户端搜不到设备。 -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>onvifsim 需要访问本地网络，才能响应 ONVIF 设备发现（WS-Discovery 多播）
+并向局域网内的客户端提供 RTSP 视频流。</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_onvif._tcp</string>
+    <string>_rtsp._tcp</string>
+  </array>
+
+  <!-- 无界面模式在终端里跑，不需要 Dock 图标；GUI 模式照常显示。 -->
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.developer-tools</string>
+  <key>LSMultipleInstancesProhibited</key>
+  <false/>
+</dict>
+</plist>

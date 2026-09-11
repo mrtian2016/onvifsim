@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "name": "tplink-full-house",
+  "description": "TP-Link 全家桶：XAddr 报 :2020、PTZ Spaces 为空、GetEventProperties 返回非法 XML、订阅端口递增、预置位名百分号编码。本项目怪癖最密集的一台。",
+  "config": {
+    "networkMode": "ports",
+    "bindAddress": "0.0.0.0",
+    "httpBasePort": 8000,
+    "rtspBasePort": 8554,
+    "discoveryEnabled": true,
+    "controlApiEnabled": true,
+    "controlApiPort": 9000
+  },
+  "cameras": [
+    {
+      "id": "cam1",
+      "displayName": "TL-IPC652P-A4",
+      "persona": "tplink",
+      "network": { "httpPort": 8000, "rtspPort": 8554 },
+      "quirks": {
+        "connect.xaddr_odd_port": { "enabled": true, "params": { "port": 2020, "path": "/onvif/service" } },
+        "ptz.spaces_empty": { "enabled": true, "params": { "value": "empty" } },
+        "events.bad_xml": true,
+        "events.subscription_port_increment": { "enabled": true, "params": { "base_port": 1024 } },
+        "ptz.preset_percent_encoded": true,
+        "ptz.factory_300_presets": { "enabled": true, "params": { "count": 300 } },
+        "media.profile_naming": { "enabled": true, "params": { "value": "profile_n" } }
+      }
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+// Windows 资源脚本：给 onvifsim.exe 装上图标和版本信息。
+// 由 CMake configure_file 生成，@ONVIFSIM_VERSION_*@ 在配置期展开。
+//
+// 第一个 ICON 资源的序号决定资源管理器显示哪个图标 —— 必须是 1。
+1 ICON "@ONVIFSIM_ICON_PATH@"
+
+1 VERSIONINFO
+FILEVERSION    @ONVIFSIM_VERSION_RC@
+PRODUCTVERSION @ONVIFSIM_VERSION_RC@
+FILEOS         0x4L        // VOS_NT_WINDOWS32
+FILETYPE       0x1L        // VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        // 040904B0 = 美式英语 + Unicode。Windows 属性页按这个块取字串。
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "onvifsim"
+            VALUE "FileDescription",  "ONVIF camera simulator"
+            VALUE "FileVersion",      "@ONVIFSIM_VERSION_FULL@"
+            VALUE "InternalName",     "onvifsim"
+            VALUE "OriginalFilename", "onvifsim.exe"
+            VALUE "ProductName",      "onvifsim"
+            VALUE "ProductVersion",   "@ONVIFSIM_VERSION_FULL@"
+            VALUE "LegalCopyright",   "MIT License"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

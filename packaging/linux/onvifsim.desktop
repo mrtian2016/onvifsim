@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=onvifsim
+GenericName=ONVIF Camera Simulator
+GenericName[zh_CN]=ONVIF 摄像头模拟器
+Comment=Simulate ONVIF IP cameras, including real-world firmware quirks
+Comment[zh_CN]=模拟 ONVIF 网络摄像机，可按需复现真实固件的毛病
+Exec=onvifsim %f
+Icon=onvifsim
+Terminal=false
+Categories=Development;Network;Utility;
+Keywords=onvif;rtsp;camera;simulator;ip camera;
+MimeType=application/json;
+StartupWMClass=onvifsim

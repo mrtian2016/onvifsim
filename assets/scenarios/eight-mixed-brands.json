@@ -1,0 +1,24 @@
+{
+  "formatVersion": 1,
+  "name": "eight-mixed-brands",
+  "description": "8 路混品牌，每家的路径风格、topic 命名、对讲布局都不同。压 NVR 的多相机流程。",
+  "config": {
+    "networkMode": "ports",
+    "bindAddress": "0.0.0.0",
+    "httpBasePort": 8000,
+    "rtspBasePort": 8554,
+    "discoveryEnabled": true,
+    "controlApiEnabled": true,
+    "controlApiPort": 9000
+  },
+  "cameras": [
+    { "id": "cam1", "persona": "hikvision", "network": { "httpPort": 8000, "rtspPort": 8554 } },
+    { "id": "cam2", "persona": "dahua",     "network": { "httpPort": 8001, "rtspPort": 8555 } },
+    { "id": "cam3", "persona": "reolink",   "network": { "httpPort": 8002, "rtspPort": 8556 } },
+    { "id": "cam4", "persona": "vigi",      "network": { "httpPort": 8003, "rtspPort": 8557 } },
+    { "id": "cam5", "persona": "tplink",    "network": { "httpPort": 8004, "rtspPort": 8558 } },
+    { "id": "cam6", "persona": "axis",      "network": { "httpPort": 8005, "rtspPort": 8559 } },
+    { "id": "cam7", "persona": "uniview",   "network": { "httpPort": 8006, "rtspPort": 8560 } },
+    { "id": "cam8", "persona": "generic",   "network": { "httpPort": 8007, "rtspPort": 8561 } }
+  ]
+}

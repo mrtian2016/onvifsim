@@ -1,0 +1,18 @@
+<!DOCTYPE RCC>
+<!--
+  程序图标。母版是 assets/logo/onvifsim.svg，这里放的是 tools/make-icons.sh
+  预渲染的位图 —— 不走 SVG，是为了不依赖 qsvg 图像插件：打包时少一个插件要漏，
+  运行期少一次解析。QIcon 会按窗口/托盘的实际像素密度自己挑最合适的一张。
+  资源名（icons）与 GuiUtil.cpp 里的 Q_INIT_RESOURCE(icons) 必须对上。
+-->
+<RCC>
+    <qresource prefix="/onvifsim">
+        <file alias="logo-16.png">../../assets/logo/png/onvifsim-16.png</file>
+        <file alias="logo-24.png">../../assets/logo/png/onvifsim-24.png</file>
+        <file alias="logo-32.png">../../assets/logo/png/onvifsim-32.png</file>
+        <file alias="logo-48.png">../../assets/logo/png/onvifsim-48.png</file>
+        <file alias="logo-64.png">../../assets/logo/png/onvifsim-64.png</file>
+        <file alias="logo-128.png">../../assets/logo/png/onvifsim-128.png</file>
+        <file alias="logo-256.png">../../assets/logo/png/onvifsim-256.png</file>
+    </qresource>
+</RCC>

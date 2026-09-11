@@ -1,0 +1,22 @@
+{
+  "formatVersion": 1,
+  "name": "single-camera",
+  "description": "一台标准 ONVIF 相机，什么毛病都没有。用来验证客户端的基本流程。",
+  "config": {
+    "networkMode": "ports",
+    "bindAddress": "0.0.0.0",
+    "httpBasePort": 8000,
+    "rtspBasePort": 8554,
+    "discoveryEnabled": true,
+    "controlApiEnabled": true,
+    "controlApiPort": 9000
+  },
+  "cameras": [
+    {
+      "id": "cam1",
+      "displayName": "Lab Camera",
+      "persona": "generic",
+      "network": { "httpPort": 8000, "rtspPort": 8554 }
+    }
+  ]
+}

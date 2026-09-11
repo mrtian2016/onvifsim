@@ -1,0 +1,88 @@
+# 用 macvlan 让每台虚拟相机在局域网里拥有**自己的 IP 和 MAC**，
+# 客户端看起来就跟一堆真相机没区别：各自占标准端口、WS-Discovery 各回各的。
+#
+# ⚠️ 这只在 **Linux 宿主** 上成立。
+#    macOS / Windows 上的 Docker Desktop 跑在一层轻量虚拟机里，
+#    macvlan 接口连的是那层 VM 的网络，**到不了物理局域网** ——
+#    容器之间能互通，宿主和局域网里的其他机器都看不见它们。
+#    那两个平台请直接在宿主上跑 onvifsim（端口模式或 IP 别名模式）。
+#
+# 还有一条 macvlan 的通病：**宿主自己 ping 不通 macvlan 容器**（内核限制）。
+# 要从宿主访问，得在宿主上另建一个 macvlan 子接口做桥接，或者干脆用别的机器测。
+#
+# 用之前先改三处：parent 网卡名、subnet/gateway、ip_range。
+# 那段 IP 要在局域网的网段内，且**不在 DHCP 池里**，否则会撞地址。
+#
+#   docker compose -f packaging/docker/compose.macvlan.yml up -d
+#   docker compose -f packaging/docker/compose.macvlan.yml down
+
+services:
+  cam-hikvision:
+    image: onvifsim:latest
+    build:
+      context: ../..
+      dockerfile: packaging/docker/Dockerfile
+    command:
+      - --headless
+      - --cameras=1
+      - --preset=hikvision
+      - --bind=0.0.0.0
+      - --http-port=80
+      - --rtsp-port=554
+      - --control-port=9000
+    networks:
+      lan:
+        ipv4_address: 192.168.1.201
+    mac_address: 02:42:c0:a8:01:c9
+    restart: unless-stopped
+
+  cam-dahua:
+    image: onvifsim:latest
+    command:
+      - --headless
+      - --cameras=1
+      - --preset=dahua
+      - --bind=0.0.0.0
+      - --http-port=80
+      - --rtsp-port=554
+      - --control-port=9000
+    networks:
+      lan:
+        ipv4_address: 192.168.1.202
+    mac_address: 02:42:c0:a8:01:ca
+    restart: unless-stopped
+
+  cam-tplink:
+    image: onvifsim:latest
+    command:
+      - --headless
+      - --cameras=1
+      - --preset=tplink
+      - --bind=0.0.0.0
+      - --http-port=80
+      - --rtsp-port=554
+      - --control-port=9000
+      # TP-Link TL-IPC 的招牌毛病：XAddr 报 :2020、PTZ Spaces 为空、
+      # GetEventProperties 吐非法 XML、订阅端口递增。
+      - --quirk=connect.xaddr_odd_port
+      - --quirk=ptz.spaces_empty
+      - --quirk=events.bad_xml
+      - --quirk=events.subscription_port_increment
+    networks:
+      lan:
+        ipv4_address: 192.168.1.203
+    mac_address: 02:42:c0:a8:01:cb
+    restart: unless-stopped
+
+networks:
+  lan:
+    driver: macvlan
+    driver_opts:
+      # ⬇⬇ 改成你自己的物理网卡名（ip link 看）
+      parent: eth0
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
+          gateway: 192.168.1.1
+          # 只从这一小段里分配，别和 DHCP 池重叠
+          ip_range: 192.168.1.200/29

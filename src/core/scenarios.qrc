@@ -1,0 +1,14 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+  <!-- 内嵌示例场景。运行时可用外部目录覆盖。 -->
+  <qresource prefix="/scenarios">
+    <file alias="bad-network.json">../../assets/scenarios/bad-network.json</file>
+    <file alias="discovery-quirks.json">../../assets/scenarios/discovery-quirks.json</file>
+    <file alias="eight-mixed-brands.json">../../assets/scenarios/eight-mixed-brands.json</file>
+    <file alias="event-storm.json">../../assets/scenarios/event-storm.json</file>
+    <file alias="legacy-firmware.json">../../assets/scenarios/legacy-firmware.json</file>
+    <file alias="single-camera.json">../../assets/scenarios/single-camera.json</file>
+    <file alias="talkback.json">../../assets/scenarios/talkback.json</file>
+    <file alias="tplink-full-house.json">../../assets/scenarios/tplink-full-house.json</file>
+  </qresource>
+</RCC>

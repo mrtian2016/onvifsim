@@ -1,0 +1,44 @@
+name: Bug
+description: onvifsim 自己的问题（崩溃、行为不对、装不上）
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / Version
+      description: "`onvifsim --version`（Windows 上用 onvifsim-cli.exe）"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台 / Platform
+      options:
+        - Linux (AppImage)
+        - Linux (deb)
+        - Linux (tar.gz / 自己构建)
+        - macOS (dmg)
+        - Windows (installer)
+        - Windows (zip)
+        - Docker
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 怎么复现 / Steps to reproduce
+      description: 命令行参数、用的场景文件、开了哪些 quirk。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望什么 / 实际什么
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / Logs
+      description: "`--log-file` 的输出，或界面日志面板里导出的那份。"
+      render: text

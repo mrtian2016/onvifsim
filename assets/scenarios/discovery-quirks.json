@@ -1,0 +1,49 @@
+{
+  "formatVersion": 1,
+  "name": "discovery-quirks",
+  "description": "发现层怪癖集：缺 MetadataVersion（客户端整包丢）、缺 XAddrs（逼客户端发 Resolve）、坏 XAddr 排第一、回复两次。",
+  "config": {
+    "networkMode": "ports",
+    "bindAddress": "0.0.0.0",
+    "httpBasePort": 8000,
+    "rtspBasePort": 8554,
+    "discoveryEnabled": true,
+    "controlApiEnabled": true,
+    "controlApiPort": 9000
+  },
+  "cameras": [
+    {
+      "id": "cam1",
+      "displayName": "缺 MetadataVersion",
+      "persona": "generic",
+      "network": { "httpPort": 8000, "rtspPort": 8554 },
+      "quirks": { "discovery.no_metadata_version": true }
+    },
+    {
+      "id": "cam2",
+      "displayName": "缺 XAddrs（走 Resolve）",
+      "persona": "generic",
+      "network": { "httpPort": 8001, "rtspPort": 8555 },
+      "quirks": { "discovery.no_xaddrs": true }
+    },
+    {
+      "id": "cam3",
+      "displayName": "坏 XAddr 排第一",
+      "persona": "generic",
+      "network": { "httpPort": 8002, "rtspPort": 8556 },
+      "quirks": {
+        "discovery.bad_xaddr_ip": { "enabled": true, "params": { "address": "192.168.99.99", "first": true } }
+      }
+    },
+    {
+      "id": "cam4",
+      "displayName": "回复两次 + 无 name scope",
+      "persona": "generic",
+      "network": { "httpPort": 8003, "rtspPort": 8557 },
+      "quirks": {
+        "discovery.reply_twice": { "enabled": true, "params": { "differing_xaddrs": true } },
+        "discovery.scopes_no_name": true
+      }
+    }
+  ]
+}

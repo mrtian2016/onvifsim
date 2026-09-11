@@ -1,0 +1,6 @@
+# e2e 有自己的 venv 与缓存，都不入库。
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/

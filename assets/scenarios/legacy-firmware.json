@@ -1,0 +1,32 @@
+{
+  "formatVersion": 1,
+  "name": "legacy-firmware",
+  "description": "老固件：没有 GetServices、没有 Media2、没有 GetEventProperties、设备信息缺字段。只剩 GetCapabilities 一条路。",
+  "config": {
+    "networkMode": "ports",
+    "bindAddress": "0.0.0.0",
+    "httpBasePort": 8000,
+    "rtspBasePort": 8554,
+    "discoveryEnabled": true,
+    "controlApiEnabled": true,
+    "controlApiPort": 9000
+  },
+  "cameras": [
+    {
+      "id": "cam1",
+      "displayName": "Legacy",
+      "persona": "generic",
+      "network": { "httpPort": 8000, "rtspPort": 8554 },
+      "capabilities": { "media2": false, "analytics": false, "deviceIo": false },
+      "quirks": {
+        "connect.no_get_services": true,
+        "connect.device_info_missing": { "enabled": true, "params": { "fields": "HardwareId,SerialNumber" } },
+        "events.no_get_event_properties": { "enabled": true, "params": { "value": "action_not_supported" } },
+        "media.no_get_snapshot_uri": true,
+        "ptz.no_get_presets": { "enabled": true, "params": { "value": "text" } },
+        "rtsp.sdp_no_rtpmap": true,
+        "rtsp.no_audio_output_config": true
+      }
+    }
+  ]
+}

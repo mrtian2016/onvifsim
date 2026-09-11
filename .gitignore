@@ -1,0 +1,20 @@
+build/
+build-*/
+.cache/
+compile_commands.json
+CMakeUserPresets.json
+*.user
+.vscode/
+.idea/
+tests/e2e/.venv/
+tests/e2e/__pycache__/
+tests/e2e/.pytest_cache/
+dist/
+*.AppImage
+*.dmg
+logs/
+*.log
+
+# macOS / 编辑器
+.DS_Store
+*.dSYM/

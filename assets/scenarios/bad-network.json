@@ -1,0 +1,31 @@
+{
+  "formatVersion": 1,
+  "name": "bad-network",
+  "description": "恶劣网络：整机延迟、丢包、慢发送、随机掉线、周期断流。测客户端的重连与超时。",
+  "config": {
+    "networkMode": "ports",
+    "bindAddress": "0.0.0.0",
+    "httpBasePort": 8000,
+    "rtspBasePort": 8554,
+    "discoveryEnabled": true,
+    "controlApiEnabled": true,
+    "controlApiPort": 9000
+  },
+  "cameras": [
+    {
+      "id": "cam1",
+      "displayName": "Weak Link",
+      "persona": "generic",
+      "network": { "httpPort": 8000, "rtspPort": 8554 },
+      "quirks": {
+        "transport.global_delay": { "enabled": true, "params": { "ms": 1500 } },
+        "transport.slowloris": { "enabled": true, "params": { "chunk_bytes": 32, "interval_ms": 300 } },
+        "transport.random_dropout": { "enabled": true, "params": { "percent": 8.0, "seconds": 15 } },
+        "rtsp.rtp_packet_loss": { "enabled": true, "params": { "percent": 12.0 } },
+        "rtsp.periodic_teardown": { "enabled": true, "params": { "seconds": 120 } },
+        "transport.rtp_rate_limit": { "enabled": true, "params": { "kbps": 512 } },
+        "discovery.reply_delay": { "enabled": true, "params": { "ms": 2200 } }
+      }
+    }
+  ]
+}

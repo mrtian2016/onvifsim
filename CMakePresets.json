@@ -1,0 +1,79 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "conda",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{CONDA_PREFIX}"
+      }
+    },
+    {
+      "name": "conda-linux",
+      "displayName": "conda / Linux",
+      "inherits": "conda",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "conda-mac",
+      "displayName": "conda / macOS",
+      "inherits": "conda",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" }
+    },
+    {
+      "name": "conda-win",
+      "displayName": "conda / Windows",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{CONDA_PREFIX}/Library"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "headless",
+      "displayName": "headless (no GUI, for containers/CI)",
+      "inherits": "conda",
+      "cacheVariables": { "BUILD_GUI": "OFF" }
+    },
+    {
+      "name": "release",
+      "displayName": "release",
+      "inherits": "conda",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "ci",
+      "displayName": "CI (warnings are errors)",
+      "inherits": "conda",
+      "cacheVariables": { "ENABLE_WERROR": "ON" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "conda-linux", "configurePreset": "conda-linux" },
+    { "name": "conda-mac", "configurePreset": "conda-mac" },
+    { "name": "conda-win", "configurePreset": "conda-win" },
+    { "name": "headless", "configurePreset": "headless" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "ci", "configurePreset": "ci" }
+  ],
+  "testPresets": [
+    { "name": "conda-linux", "configurePreset": "conda-linux", "output": { "outputOnFailure": true } },
+    { "name": "headless", "configurePreset": "headless", "output": { "outputOnFailure": true } },
+    { "name": "ci", "configurePreset": "ci", "output": { "outputOnFailure": true } }
+  ]
+}

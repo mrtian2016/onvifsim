@@ -1,0 +1,47 @@
+{
+  "formatVersion": 1,
+  "name": "talkback",
+  "description": "对讲三连：海康单轨 + 忙槽位、大华双轨、能力谎标（声明 AAC 实发 PCMU）。",
+  "config": {
+    "networkMode": "ports",
+    "bindAddress": "0.0.0.0",
+    "httpBasePort": 8000,
+    "rtspBasePort": 8554,
+    "discoveryEnabled": true,
+    "controlApiEnabled": true,
+    "controlApiPort": 9000
+  },
+  "cameras": [
+    {
+      "id": "cam1",
+      "displayName": "Hikvision 单轨 + 忙槽位",
+      "persona": "hikvision",
+      "network": { "httpPort": 8000, "rtspPort": 8554 },
+      "quirks": {
+        "rtsp.talkback_busy_slot": { "enabled": true, "params": { "seconds": 4 } },
+        "rtsp.talkback_require_marker": true
+      }
+    },
+    {
+      "id": "cam2",
+      "displayName": "Dahua 双轨",
+      "persona": "dahua",
+      "network": { "httpPort": 8001, "rtspPort": 8555 },
+      "quirks": {
+        "rtsp.talkback_dual_track": true
+      }
+    },
+    {
+      "id": "cam3",
+      "displayName": "能力谎标",
+      "persona": "generic",
+      "network": { "httpPort": 8002, "rtspPort": 8556 },
+      "quirks": {
+        "rtsp.audio_capability_lie": true,
+        "media.codec_mismatch": { "enabled": true, "params": { "declared": "AAC", "actual": "PCMU" } },
+        "rtsp.g722_sample_rate_8000": true,
+        "rtsp.audio_decoder_options_shape": { "enabled": true, "params": { "value": "b" } }
+      }
+    }
+  ]
+}

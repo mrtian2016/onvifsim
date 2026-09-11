@@ -1,0 +1,271 @@
+# 打 tag 就出三平台产物并挂到 GitHub Release 上。
+#
+#   git tag -a v0.1.0 -m "0.1.0" && git push origin v0.1.0
+#
+# 产物：
+#   Linux    AppImage（自带 Qt，下载即跑）+ deb（Debian/Ubuntu）+ tar.gz（靠系统 Qt）
+#   Windows  免安装 zip（windeployqt 收齐运行时）
+#   macOS    dmg（macdeployqt + ad-hoc 签名，无开发者账号也能跑）
+#   容器     ghcr.io 上的 headless 镜像
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要打包的 tag（手工触发时用）'
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  linux:
+    name: Linux 产物
+    runs-on: ubuntu-22.04    # 用老一点的 glibc，产物能在更多发行版上跑
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: 装工具链（micromamba）
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: onvifsim-release
+          create-args: >-
+            qt6-main
+            cmake
+            ninja
+            cxx-compiler
+          init-shell: bash
+
+      - name: AppImage 工具的运行期依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            file fuse libfuse2 desktop-file-utils patchelf zsync
+
+      - name: 构建
+        shell: micromamba-shell {0}
+        run: |
+          cmake --preset release
+          cmake --build --preset release
+
+      - name: 打 AppImage 与 tar.gz
+        shell: micromamba-shell {0}
+        run: |
+          ./packaging/linux/make-appimage.sh build/release dist
+          ./packaging/linux/make-tarball.sh build/release dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*
+
+  linux-deb:
+    name: Linux 产物 (deb)
+    # deb 必须用**发行版的 Qt** 构建，不能用 conda 的那份：包的 Depends 是从
+    # 二进制实际链接的 .so 反推出来的。22.04 的 Qt 6.2 正好是本项目的下限，
+    # 打出来的包在 22.04 及以后都装得上。
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: 装发行版 Qt6 与打包工具
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-l10n-tools \
+            cmake ninja-build g++ dpkg-dev fakeroot lintian
+
+      - name: 构建（系统 Qt）
+        run: |
+          cmake -S . -B build/deb -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
+          cmake --build build/deb
+
+      - name: 打 deb
+        run: ./packaging/linux/make-deb.sh build/deb dist
+
+      - name: 装一遍再卸一遍，确认包是好的
+        run: |
+          sudo apt-get install -y ./dist/onvifsim_*.deb
+          onvifsim --version
+          onvifsim --list-quirks > /dev/null
+          # 无界面模式没有「跑多久就退出」的开关，靠 timeout 掐；124 是被掐掉，
+          # 说明它确实起来了并且一直在跑，这就是要验的东西。
+          timeout 5 onvifsim --headless --cameras 1 --control-port 9099 \
+            || [ $? -eq 124 ]
+          sudo apt-get remove -y onvifsim
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: dist/*.deb
+
+  windows:
+    name: Windows 产物
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: 装工具链（micromamba）
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: onvifsim-release
+          create-args: >-
+            qt6-main
+            cmake
+            ninja
+            cxx-compiler
+          init-shell: bash powershell
+
+      - name: 构建
+        shell: micromamba-shell {0}
+        run: |
+          cmake --preset release
+          cmake --build --preset release
+
+      - name: 装 Inno Setup（做引导式安装包用）
+        run: winget install --id JRSoftware.InnoSetup -e --accept-package-agreements --accept-source-agreements
+        shell: pwsh
+        continue-on-error: true   # winget 在 runner 上偶尔抽风，装不上就只出 zip
+
+      - name: 打免安装 zip 与安装包
+        shell: micromamba-shell {0}
+        run: |
+          pwsh -File packaging/windows/make-installer.ps1 -BuildDir build/release -OutputDir dist ||
+            pwsh -File packaging/windows/make-portable.ps1 -BuildDir build/release -OutputDir dist
+
+      - name: 清掉打包用的中间目录（只留 zip 与 setup.exe）
+        shell: bash
+        run: rm -rf dist/onvifsim-*-windows-x64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+
+  macos:
+    name: macOS 产物 (arm64)
+    # 显式钉 macos-14：它是 Apple Silicon 的 runner。用 macos-latest 的话，
+    # GitHub 换默认镜像时架构会跟着变，产物名与实际架构就对不上了。
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: 装工具链（micromamba）
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: onvifsim-release
+          create-args: >-
+            qt6-main
+            cmake
+            ninja
+            cxx-compiler
+          init-shell: bash
+
+      - name: 构建
+        shell: micromamba-shell {0}
+        run: |
+          cmake --preset release
+          cmake --build --preset release
+
+      - name: 打 dmg（ad-hoc 签名）
+        shell: micromamba-shell {0}
+        run: ./packaging/macos/make-dmg.sh build/release dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*
+
+  docker:
+    name: 容器镜像
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packaging/docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  publish:
+    name: 发布 Release
+    runs-on: ubuntu-latest
+    needs: [linux, linux-deb, windows, macos]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 列一下产物
+        run: ls -lh dist
+
+      - name: 生成校验和
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt
+
+      - name: 从 CHANGELOG 抽出这个版本的段落
+        id: notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ -f CHANGELOG.md ]; then
+            awk -v v="$version" '
+              /^## \[/ { if (found) exit; if (index($0, "[" v "]")) { found=1; next } }
+              found { print }
+            ' CHANGELOG.md > release-notes.md
+          fi
+          if [ ! -s release-notes.md ]; then
+            echo "本次发布的变更见 CHANGELOG.md。" > release-notes.md
+          fi
+          cat release-notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
+          fail_on_unmatched_files: true

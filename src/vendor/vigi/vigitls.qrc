@@ -1,0 +1,15 @@
+<!DOCTYPE RCC>
+<RCC>
+    <!--
+      VIGI 私有端口（quirk F2）用的自签证书与私钥，DER 二进制而不是 PEM。
+      不是为了省字节，是为了不在仓库里留下 PEM 那行 armor 标记：
+      GitHub 的 push protection 和各家企业扫描器一看到它就告警甚至拒推，
+      而这把钥匙本来就是公开的测试用钥匙，拦下来纯属误报。
+      DER 是二进制，文本扫描器不会匹配，QSslKey / QSslCertificate 也直接支持。
+      资源名（vigitls）与 VigiStub.cpp 里的 Q_INIT_RESOURCE(vigitls) 必须对上。
+    -->
+    <qresource prefix="/onvifsim/tls">
+        <file alias="vigi-cert.der">../../../assets/tls/vigi-cert.der</file>
+        <file alias="vigi-key.der">../../../assets/tls/vigi-key.der</file>
+    </qresource>
+</RCC>

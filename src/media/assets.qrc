@@ -1,0 +1,17 @@
+<!DOCTYPE RCC>
+<!--
+  内嵌媒体样片。文件由 assets/media/scripts/gen-media.sh 用 ffmpeg 预先生成并提交进 git，
+  运行期只从这里读，所以用户构建 onvifsim 不需要装 ffmpeg（CLAUDE.md 硬性约束）。
+  加档位时记得同步 H264Source.cpp 里的 kBuiltins 表。
+-->
+<RCC version="1.0">
+    <qresource prefix="/media">
+        <file alias="h264-360p.h264">../../assets/media/h264-360p.h264</file>
+        <file alias="h264-720p.h264">../../assets/media/h264-720p.h264</file>
+        <file alias="h264-1080p.h264">../../assets/media/h264-1080p.h264</file>
+        <file alias="h264-black.h264">../../assets/media/h264-black.h264</file>
+        <file alias="h264-freeze.h264">../../assets/media/h264-freeze.h264</file>
+        <file alias="h264-noise.h264">../../assets/media/h264-noise.h264</file>
+        <file alias="aac-16k.aac">../../assets/media/aac-16k.aac</file>
+    </qresource>
+</RCC>

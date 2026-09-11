@@ -1,0 +1,143 @@
+.\" onvifsim 的 man page。选项列表要与 src/cli/CliOptions.cpp 里的 --help 保持一致。
+.TH ONVIFSIM 1 "2026-09-11" "onvifsim" "User Commands"
+.SH NAME
+onvifsim \- ONVIF camera simulator with fault injection
+.SH SYNOPSIS
+.B onvifsim
+.RI [ options ]
+.br
+.B onvifsim
+.B \-\-headless
+.RB [ \-\-scenario
+.IR file ]
+.RI [ options ]
+.SH DESCRIPTION
+.B onvifsim
+simulates ONVIF IP cameras for testing NVRs, VMS software, home\-automation
+integrations and mobile clients. It implements WS\-Discovery, WS\-Security
+authentication, RTSP streaming with embedded H.264 clips, JPEG snapshots, PTZ,
+imaging, PullPoint events and two\-way audio (backchannel).
+.PP
+Every simulated camera can behave like a well\-mannered device or reproduce
+real\-world firmware quirks on demand. See
+.BR \-\-list\-quirks .
+.PP
+Run without arguments to get the graphical interface. With
+.B \-\-headless
+it runs without a GUI and exposes a REST control API, which is how it is
+normally driven from CI.
+.SH OPTIONS
+.TP
+.BR \-H ", " \-\-headless
+Run without the graphical interface.
+.TP
+.BI \-\-scenario " file"
+Load a scenario file describing cameras, quirks and network layout.
+.TP
+.BI \-\-cameras " n"
+Create
+.I n
+cameras.
+.TP
+.BI \-\-preset " key"
+Vendor persona for the created cameras. See
+.BR \-\-list\-presets .
+.TP
+.BI \-\-bind " addr"
+Listen address, default 0.0.0.0.
+.TP
+.BI \-\-http\-port " port"
+First HTTP port, default 8000. Each camera takes the next one.
+.TP
+.BI \-\-rtsp\-port " port"
+First RTSP port, default 8554.
+.TP
+.BI \-\-ip\-range " addr"
+Give each camera its own IP starting at
+.IR addr .
+The aliases must already exist, or the process needs the privileges to add them.
+.TP
+.BI \-\-iface " name"
+Network interface used for IP aliases and WS\-Discovery.
+.TP
+.B \-\-no\-discovery
+Do not answer WS\-Discovery probes.
+.TP
+.B \-\-no\-control\-api
+Do not start the REST control API.
+.TP
+.BI \-\-control\-port " port"
+Control API port, default 9000.
+.TP
+.BI \-\-control\-bind " addr"
+Control API listen address, default 127.0.0.1. Use 0.0.0.0 in containers.
+.TP
+.BI \-\-control\-token " token"
+Require this token on the control API.
+.B Strongly recommended
+whenever the control API is reachable from anywhere but the loopback
+interface: without a token every request is accepted.
+.TP
+.BI \-\-quirk " key" [= value ]
+Enable one fault\-injection switch; may be repeated. Parameters use the form
+.IR key . param = value ,
+for example
+.BR rtsp.max_sessions.max=1 .
+.TP
+.BI \-\-log\-file " path"
+Also write the structured log to this file.
+.TP
+.B \-\-verbose
+Include full protocol messages in the log.
+.TP
+.B \-\-list\-presets
+List the vendor personas and exit.
+.TP
+.B \-\-list\-quirks
+List every fault\-injection switch and exit. Add
+.B \-\-markdown
+for Markdown output.
+.TP
+.B \-\-list\-scenarios
+List the built\-in scenarios and exit.
+.TP
+.BR \-v ", " \-\-version
+Print the version and exit.
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary and exit.
+.SH FILES
+.TP
+.I /usr/share/onvifsim/scenarios/
+Scenario files shipped with the package.
+.TP
+.I ~/.config/onvifsim/onvifsim.conf
+GUI settings.
+.SH EXAMPLES
+.PP
+Eight Hikvision\-flavoured cameras, no GUI:
+.PP
+.RS
+.EX
+onvifsim \-\-headless \-\-cameras 8 \-\-preset hikvision
+.EE
+.RE
+.PP
+Reproduce a camera that drops 15% of its RTP packets:
+.PP
+.RS
+.EX
+onvifsim \-\-headless \-\-quirk rtsp.rtp_packet_loss.percent=15
+.EE
+.RE
+.SH EXIT STATUS
+.TP
+.B 0
+Normal termination.
+.TP
+.B 2
+Bad command line, or the simulator could not start.
+.SH SEE ALSO
+Full documentation at
+.UR https://github.com/mrtian2016/onvifsim
+.UE .

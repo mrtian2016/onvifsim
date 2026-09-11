@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!--
+    onvifsim 标志：镜头光圈 + 虚线发现环。
+    光圈 = 摄像机；虚线环 = WS-Discovery 广播，同时暗示"虚拟/模拟"。
+    只用 SVG Tiny 1.2 支持的元素（Qt QSvgRenderer 能渲染），不要引入 CSS / filter / mask。
+    改动后请运行 tools/make-icons.sh 重新生成各平台图标。
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#1E4266"/>
+      <stop offset="1" stop-color="#0A1523"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="256" height="256" rx="58" fill="url(#bg)"/>
+
+  <!-- 发现广播环 -->
+  <circle cx="128" cy="128" r="88" fill="none" stroke="#38BDF8" stroke-width="9"
+          stroke-dasharray="24 22" stroke-linecap="round" opacity="0.55"/>
+
+  <!-- 镜筒 -->
+  <circle cx="128" cy="128" r="70" fill="#0A1523" stroke="#EAF2F8" stroke-width="8"/>
+
+  <!-- 光圈叶片（六片，带旋转错位） -->
+  <g>
+    <path d="M128.0 71.0 L177.4 99.5 L143.0 129.0 L136.4 115.6 Z" fill="#EAF2F8"/>
+    <path d="M177.4 99.5 L177.4 156.5 L134.6 141.5 L143.0 129.0 Z" fill="#A9C3D6"/>
+    <path d="M177.4 156.5 L128.0 185.0 L119.6 140.4 L134.6 141.5 Z" fill="#EAF2F8"/>
+    <path d="M128.0 185.0 L78.6 156.5 L113.0 127.0 L119.6 140.4 Z" fill="#A9C3D6"/>
+    <path d="M78.6 156.5 L78.6 99.5 L121.4 114.5 L113.0 127.0 Z" fill="#EAF2F8"/>
+    <path d="M78.6 99.5 L128.0 71.0 L136.4 115.6 L121.4 114.5 Z" fill="#A9C3D6"/>
+  </g>
+
+  <!-- 通光孔 -->
+  <circle cx="128" cy="128" r="15" fill="#38BDF8"/>
+  <circle cx="119" cy="119" r="5" fill="#FFFFFF" opacity="0.9"/>
+</svg>

@@ -1,0 +1,28 @@
+{
+  "formatVersion": 1,
+  "name": "event-storm",
+  "description": "事件风暴 + 订阅槽位泄漏。压客户端的事件队列与订阅管理。",
+  "config": {
+    "networkMode": "ports",
+    "bindAddress": "0.0.0.0",
+    "httpBasePort": 8000,
+    "rtspBasePort": 8554,
+    "discoveryEnabled": true,
+    "controlApiEnabled": true,
+    "controlApiPort": 9000
+  },
+  "cameras": [
+    {
+      "id": "cam1",
+      "displayName": "Event Storm",
+      "persona": "generic",
+      "network": { "httpPort": 8000, "rtspPort": 8554 },
+      "quirks": {
+        "events.storm": { "enabled": true, "params": { "per_second": 80 } },
+        "auth.subscription_never_expires": true,
+        "events.subscription_slot_limit": { "enabled": true, "params": { "max": 4, "on_overflow": "fault" } },
+        "events.state_not_paired": true
+      }
+    }
+  ]
+}
