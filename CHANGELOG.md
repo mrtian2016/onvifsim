@@ -75,11 +75,18 @@ Ubuntu 22.04 上报 `CXXABI_1.3.15 not found`；tar.gz 被排进了那个 conda 
 
 ### 已知问题
 
-- **AppImage 需要宿主上有 libGL**（`apt install libgl1`）。linuxdeploy 按设计不打包
-  OpenGL —— 驱动必须用宿主的，打进去反而会在别的机器上坏掉。桌面发行版都自带，
+- **AppImage 依赖宿主的 OpenGL 与 X11 运行时库。** linuxdeploy 按设计不打包这些
+  —— 图形驱动必须用宿主那一份，打进去反而会在别的机器上坏掉。桌面发行版都自带，
   但丢进纯净的服务器 / 容器里会是
-  `error while loading shared libraries: libGLX.so.0`。那种场景用
-  `ghcr.io/mrtian2016/onvifsim` 这个镜像更合适。这条 0.1.0 就有，不是本版引入。
+  `error while loading shared libraries: libGLX.so.0`。Debian / Ubuntu 上补齐：
+
+  ```bash
+  sudo apt install libgl1 libglx0 libopengl0 libegl1 \
+                   libx11-6 libx11-xcb1 libxcb1 libfontconfig1 libfreetype6
+  ```
+
+  纯无头场景用 `ghcr.io/mrtian2016/onvifsim` 这个镜像更合适。
+  这条 0.1.0 就有，不是本版引入。
 - AppImage 要求 glibc ≥ 2.34（Ubuntu 22.04 / Debian 12 / RHEL 9 及以后）。
 
 ## [0.1.0] - 2026-09-11
