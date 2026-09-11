@@ -49,17 +49,28 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            file fuse libfuse2 desktop-file-utils patchelf zsync
+            file fuse libfuse2 desktop-file-utils patchelf zsync \
+            libegl1 libgl1 libxkbcommon-x11-0
+          # libegl1 / libgl1 不是给我们自己用的，是 linuxdeploy-plugin-qt 解
+          # Qt 依赖时要读的 —— 缺了它直接
+          # `DependencyNotFoundError: Could not find dependency: libEGL.so.1`，
+          # 而且（见下）那个失败原来还会被咽掉。
 
       - name: 构建
         shell: micromamba-shell {0}
         run: |
+          set -euo pipefail
           cmake --preset release
           cmake --build --preset release
 
       - name: 打 AppImage 与 tar.gz
         shell: micromamba-shell {0}
         run: |
+          # **必须自己 set -e**：micromamba-shell 是自定义 shell，GitHub 不会像对
+          # 内置 bash 那样注入 `set -e`。少了这行，make-appimage.sh 失败之后
+          # 后面照跑、这一步还报成功，最后发出去一个少了 AppImage 的 Release。
+          # 真踩过（v0.1.0-rc1 那次）。
+          set -euo pipefail
           ./packaging/linux/make-appimage.sh build/release dist
           ./packaging/linux/make-tarball.sh build/release dist
 
@@ -85,6 +96,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             qt6-base-dev qt6-tools-dev qt6-tools-dev-tools qt6-l10n-tools \
+            libgl1-mesa-dev \
             cmake ninja-build g++ dpkg-dev fakeroot lintian
 
       - name: 构建（系统 Qt）
@@ -197,6 +209,7 @@ jobs:
       - name: 构建
         shell: micromamba-shell {0}
         run: |
+          set -euo pipefail
           cmake --preset release
           cmake --build --preset release
 
@@ -257,6 +270,38 @@ jobs:
 
       - name: 列一下产物
         run: ls -lh dist
+
+      - name: 核对产物清单
+        run: |
+          set -euo pipefail
+          # 六个产物一个都不能少。
+          #
+          # 这一步存在的理由：打包脚本失败过一次却没让 job 变红（自定义 shell
+          # 不会自动 set -e），差点发出去一个没有 AppImage 的 Release。
+          # 逐条按模式点名，比「有文件就发」可靠得多 —— 少了哪个，
+          # 这里当场报出来是哪个，而不是等用户在 Release 页面上发现。
+          expected=(
+            "*.AppImage"
+            "*_amd64.deb"
+            "*-linux-x86_64.tar.gz"
+            "*-windows-x64.zip"
+            "*-windows-x64-setup.exe"
+            "*-macos-*.dmg"
+          )
+          missing=0
+          for pattern in "${expected[@]}"; do
+            # shellcheck disable=SC2086
+            if compgen -G "dist/$pattern" > /dev/null; then
+              printf '  有  %s\n' "$(cd dist && compgen -G "$pattern" | tr '\n' ' ')"
+            else
+              printf '  缺  %s\n' "$pattern"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "产物不全，不发布。上面标「缺」的那几个去对应的 job 里看日志。" >&2
+            exit 1
+          fi
 
       - name: 生成校验和
         working-directory: dist
