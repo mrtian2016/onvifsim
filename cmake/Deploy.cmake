@@ -261,8 +261,14 @@ function(onvifsim_check_macos_bundle_paths bundle)
         execute_process(COMMAND "${ONVIFSIM_OTOOL}" -L "${_bin}"
                         OUTPUT_VARIABLE _out OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
         string(REPLACE "\n" ";" _lines "${_out}")
-        list(POP_FRONT _lines)          # 第一行是文件名自己，不是依赖
         foreach(_line IN LISTS _lines)
+            # otool 的依赖行以 tab 开头；顶格的是标题行。**fat 二进制每个架构一行
+            # 标题**（`<路径> (architecture arm64):`），所以不能只跳过第一行 ——
+            # Qt 官方的 macOS 插件全是 x86_64 + arm64 的通用二进制，只跳一行的话
+            # 第二个架构的标题会被当成依赖，整份报表全是误报。踩过。
+            if(NOT _line MATCHES "^[ \t]")
+                continue()
+            endif()
             string(STRIP "${_line}" _line)
             string(REGEX REPLACE " \\(compatibility.*" "" _dep "${_line}")
             if(_dep STREQUAL "")
