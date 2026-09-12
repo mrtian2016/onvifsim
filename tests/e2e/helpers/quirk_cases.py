@@ -551,17 +551,28 @@ def check_snapshot_auth(env):
 
 def check_snapshot_uri_rotates(env):
     """B6：快照 URI 定期失效，客户端要重探。"""
-    enable(env, "media.snapshot_uri_rotates", seconds=1)
+    # 窗口取 2 秒：边界随时可能落在 Digest 的两次往返之间，窗口越短撞上的概率越大。
+    window = 2
+
+    def fetch_fresh(tries=3):
+        """重探 URI 再取图，过期就再探 —— 这正是 quirk 要求客户端做的事。"""
+        response = None
+        for _ in range(tries):
+            response = requests.get(env.snapshot_url(),
+                                    auth=HTTPDigestAuth(env.user, env.password),
+                                    timeout=10)
+            if response.status_code == 200:
+                return response
+        return response
+
+    enable(env, "media.snapshot_uri_rotates", seconds=window)
     old = env.snapshot_url()
-    assert requests.get(old, auth=HTTPDigestAuth(env.user, env.password),
-                        timeout=10).status_code == 200
-    time.sleep(2.5)
+    assert fetch_fresh().status_code == 200, "刚探到的地址必须能用"
+    time.sleep(window + 0.5)          # 睡过一整个窗口，保证 nonce 变过一次
     stale = requests.get(old, auth=HTTPDigestAuth(env.user, env.password), timeout=10)
     fresh_url = env.snapshot_url()
     assert fresh_url != old or stale.status_code != 200, "URI 没轮换"
-    fresh = requests.get(fresh_url, auth=HTTPDigestAuth(env.user, env.password),
-                         timeout=10)
-    assert fresh.status_code == 200, "重探之后的新地址必须能用"
+    assert fetch_fresh().status_code == 200, "重探之后的新地址必须能用"
 
 
 def check_no_get_snapshot_uri(env):

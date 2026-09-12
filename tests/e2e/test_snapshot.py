@@ -140,22 +140,43 @@ def test_b4_other_bad_body_variants(env, variant):
 
 # ---- B6 / B7 ----------------------------------------------------------
 
+# B6 的轮换窗口。取 2 秒而不是 1 秒：窗口边界随时可能落在 Digest 的两次往返
+# （401 挑战 + 带 nonce 重发）之间，窗口越短撞上的概率越大。
+B6_WINDOW_SECONDS = 2
+
+
+def fetch_fresh_snapshot(env, tries=3):
+    """重探 URI 再取图，过期就再探一次。
+
+    B6 打开时，刚拿到的 URI 也可能在 Digest 的两次往返之间跨过窗口边界而 404 ——
+    这正是 quirk 要模拟的行为，**客户端本来就该重探**。所以这里也重探，
+    而不是把它当失败。不这么写这条断言会偶发性地红（踩过）。
+    """
+    response = None
+    for _ in range(tries):
+        response = fetch(env.snapshot_url(), env.user, env.password, "digest")
+        if response.status_code == 200:
+            return response
+    return response
+
+
 @pytest.mark.slow
 def test_b6_snapshot_uri_rotates(env):
     """B6：快照 URI 会随重配 / 重启失效，客户端要重探而不是一直用旧的。"""
-    env.set_quirk("media.snapshot_uri_rotates", seconds=1)
+    env.set_quirk("media.snapshot_uri_rotates", seconds=B6_WINDOW_SECONDS)
     time.sleep(0.2)
 
     old_url = env.snapshot_url()
-    assert fetch(old_url, env.user, env.password, "digest").status_code == 200
+    assert fetch_fresh_snapshot(env).status_code == 200, "刚探到的地址必须能用"
 
-    time.sleep(2.5)
+    # 睡过一整个窗口，保证 floor(now/window) 变过一次。
+    time.sleep(B6_WINDOW_SECONDS + 0.5)
     stale = fetch(old_url, env.user, env.password, "digest")
     fresh_url = env.snapshot_url()
     assert fresh_url != old_url or stale.status_code != 200, \
         "URI 没轮换，旧地址也照样能用"
 
-    fresh = fetch(fresh_url, env.user, env.password, "digest")
+    fresh = fetch_fresh_snapshot(env)
     assert fresh.status_code == 200 and fresh.content[:2] == JPEG_SOI, \
         "重探之后新地址必须能用"
 
