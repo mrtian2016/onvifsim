@@ -69,7 +69,7 @@ void installTranslators(QApplication &app)
 
     // 中文环境下这没关系（源字串就是中文）。但在英文环境下，它意味着整个界面
     // 会**静默**地显示中文 —— QTranslator 加载不到译文不报任何错。
-    // 打包漏掉 .qm 是真发生过的事故：v0.1.0 的 AppImage / tar.gz / dmg 三个产物
+    // 打包漏掉 .qm 是真发生过的事故：首次发版时 AppImage / tar.gz / dmg 三个产物
     // 全漏了，而且是发出去之后才发现的。所以这里得自己喊一声。
     if (locale.language() != QLocale::Chinese) {
         qWarning().noquote()

@@ -52,7 +52,7 @@ cmake -DONVIFSIM_DEPLOY_BUNDLE="${bundle}" \
       -P "${repo_root}/cmake/Deploy.cmake"
 
 # 跑一遍部署完、签完名的 bundle 本身。macdeployqt 漏了 offscreen 平台插件的话
-# `--headless` 在这里当场就挂 —— v0.1.0 的 dmg 是发出去之后才发现的。
+# `--headless` 在这里当场就挂 —— 首次发版时的 dmg 就漏了它。
 if ! onvifsim_smoke_test "${binary}" "dmg 里的 .app"; then
     rm -f "${dmg}"
     exit 1

@@ -12,84 +12,7 @@
 
 （暂无）
 
-## [0.1.1] - 2026-09-12
-
-**打包修复版。程序本身与 0.1.0 无差别**，改的全是「包装」。
-
-0.1.0 发出去的六个产物里有三个起不来、四个漏了英文译文，而单元测试、端到端、
-CI 六个 job 全绿 —— 因为**没有任何一处跑过打好的包**。六个产物里唯一完好的
-`.deb`，恰恰是唯一在 CI 里装了再跑一遍的那个。这一版把缺陷和缺口一起补上。
-
-0.1.0 的 AppImage / tar.gz / dmg 已从 Release 页面撤下，请用这一版。
-`.deb` 与两个 Windows 包不受影响。
-
-### 修复 —— 产物
-
-- **AppImage 完全起不来**（图形与 `--headless` 都是）：`Could not find the Qt
-  platform plugin "offscreen" in ""`。linuxdeploy 生成的 `AppRun` 是指向可执行
-  文件的裸符号链接，Qt 全靠 `usr/bin/qt.conf` 定位插件；而经 AppImage 运行时
-  启动时传给程序的 `argv[0]` 是 `.AppImage` 文件本身的路径，Qt 算出的「程序所在
-  目录」落在用户下载 AppImage 的那个目录上，qt.conf 找不到，插件搜索路径为空。
-  改成自带一个导出 `QT_PLUGIN_PATH=$APPDIR/usr/plugins` 的 AppRun 包装脚本。
-- **tar.gz 在任何发行版上都起不来**：`libQt6Core.so.6: version 'Qt_6.11' not
-  found`。它宣称靠系统 Qt，却被排在 CI 里用 conda Qt 6.11 的那个 job 打，rpath
-  还指着构建机的 micromamba 目录。改由用发行版 Qt 的 job 打，并给
-  `make-tarball.sh` 补上和 `make-deb.sh` 同样的拒绝 conda 构建的守卫。
-- **macOS `.app` 的 `--headless` 起不来**：macdeployqt 只收 cocoa 平台插件，
-  缺 `libqoffscreen.dylib`（Windows 与 Linux 早就分别补过，只有 macOS 漏着）。
-  补在 macdeployqt **之前**，这样插件的依赖路径会被一起改写成
-  `@executable_path/../Frameworks`；另加一道 `otool -L` 体检，确保 bundle 里
-  不残留任何指向构建机的绝对路径。
-- **AppImage / tar.gz / dmg 都漏了 `onvifsim_*.qm`**，切成英文时整个界面静默
-  退回中文。三个脚本统一走 `onvifsim_install_translations`。
-- macOS bundle 的译文查找路径缺失：新增 `Contents/MacOS/../Resources/i18n`。
-
-### 变更 —— CI 与发版不再走 conda
-
-三平台的 CI 与发版改用**各平台官方的那套**：Qt 用官方二进制
-（`jurplel/install-qt-action`，版本钉在 workflow 顶部的 `QT_VERSION`），编译器用
-runner 自带的（gcc / clang / MSVC）。conda 仍是本机开发的参考环境。
-
-这次三个坏产物里有两个直接由 conda 造成：AppImage 用 conda 的 GCC 15 编，在
-Ubuntu 22.04 上报 `CXXABI_1.3.15 not found`；tar.gz 被排进了那个 conda job。
-此外还有一串旧账：Windows 上 MinGW 抢链 MSVC 编的 conda Qt、
-`micromamba-shell` 在 Windows 上不存在导致步骤按平台硬拆、自定义 shell 不注入
-`set -e` 导致打包失败还绿灯、conda-forge 的 Qt 动态链一串第三方库要打包时自己捞。
-
-换完之后：AppImage 在 ubuntu-22.04 上用 runner 自带的 gcc 编，libstdc++ 的版本
-要求天然就是目标系统那一份，不需要再往包里塞 libstdc++；三平台的构建步骤合成
-一套 `shell: bash`，平台差异走矩阵变量。
-
-### 新增 —— 守卫
-
-- `packaging/common.sh`：四个打包脚本共用的三道守卫 —— 拒绝 conda 构建、
-  装译文、**冒烟跑一遍产物本身**（`--version` 之后再 `--headless` 起 5 秒看它
-  还活着）。Windows 的 `make-portable.ps1` 里有等价实现，`make-installer.ps1`
-  会调用它，两个 Windows 包都覆盖。
-  - 只跑 `--version` 是验不出东西的：它走不到 `QGuiApplication`，缺平台插件
-    照样正常打印版本号。
-  - AppImage 的冒烟必须摘掉 `APPIMAGE_EXTRACT_AND_RUN` —— 带着它跑会自解压再
-    执行里面的二进制，恰好绕开唯一出问题的那条路径。
-- 界面译文一个都没加载上时，`GuiEntry.cpp` 会 `qWarning` 报出来并列出找过的
-  目录。在此之前这是完全无声的，这正是四个产物集体漏 `.qm` 没人发现的原因。
-
-### 已知问题
-
-- **AppImage 依赖宿主的 OpenGL 与 X11 运行时库。** linuxdeploy 按设计不打包这些
-  —— 图形驱动必须用宿主那一份，打进去反而会在别的机器上坏掉。桌面发行版都自带，
-  但丢进纯净的服务器 / 容器里会是
-  `error while loading shared libraries: libGLX.so.0`。Debian / Ubuntu 上补齐：
-
-  ```bash
-  sudo apt install libgl1 libglx0 libopengl0 libegl1 \
-                   libx11-6 libx11-xcb1 libxcb1 libfontconfig1 libfreetype6
-  ```
-
-  纯无头场景用 `ghcr.io/mrtian2016/onvifsim` 这个镜像更合适。
-  这条 0.1.0 就有，不是本版引入。
-- AppImage 要求 glibc ≥ 2.34（Ubuntu 22.04 / Debian 12 / RHEL 9 及以后）。
-
-## [0.1.0] - 2026-09-11
+## [0.1.0] - 2026-09-12
 
 首个可用版本。从零实现了 `docs/plan.md` 里的 M0–M7 全部里程碑。
 
@@ -307,11 +230,13 @@ Ubuntu 22.04 上报 `CXXABI_1.3.15 not found`；tar.gz 被排进了那个 conda 
   - `test_quirk_coverage.py` 拿 `GET /api/quirks` 与断言表对账，
     新增 quirk 却忘了写断言会直接失败。
   - RTSP / RTP 客户端是手写的（`helpers/rtsp.py`），不引第三方流媒体库。
-- CI（`.github/workflows/ci.yml`）：三平台（Ubuntu / Windows / macOS）用 micromamba
-  装 Qt 6 构建 + 单元测试，`-Werror`；Linux 上额外跑 e2e、构建容器镜像、
-  校验 `docs/quirks.md` 与代码同源。
+- CI（`.github/workflows/ci.yml`）：三平台（Ubuntu / Windows / macOS）构建 + 单元测试，
+  `-Werror`；Linux 上额外跑 e2e、构建容器镜像、校验 `docs/quirks.md` 与代码同源。
   另有一个 Ubuntu 22.04 的 job 用**发行版自带的 Qt 6.2** 构建，
   守住「源码必须能用 Qt 6.2 编过」这条硬性约束。
+  工具链用各平台官方的那套 —— Qt 取官方二进制，编译器用 runner 自带的
+  gcc / clang / MSVC。AppImage 钉在 ubuntu-22.04 上构建：它按设计不打包
+  libstdc++，产物对 GLIBCXX 的要求就等于构建机那一份，得在支持的最老发行版上编。
 - Release（`.github/workflows/release.yml`）：打 tag 出三平台产物并挂到 GitHub Release，
   同时推 headless 镜像到 ghcr.io。
 - 打包配方：
@@ -323,6 +248,21 @@ Ubuntu 22.04 上报 `CXXABI_1.3.15 not found`；tar.gz 被排进了那个 conda 
   - macOS —— macdeployqt dmg + **ad-hoc 签名**（无开发者账号也能跑），
     `Info.plist` 里带 `NSLocalNetworkUsageDescription`，否则 macOS 14 会静默拦掉多播；
   - Docker —— headless 镜像与 macvlan 编排示例。
+- **每个打包脚本在封包前都会跑一遍产物本身**（`packaging/common.sh` 的
+  `onvifsim_smoke_test`，Windows 的 `make-portable.ps1` 里有等价实现）：
+  先 `--version`，再 `--headless` 起 5 秒确认它还活着，不过就不出包。
+  单测只链 `onvifsim-core`、e2e 跑的是构建目录里的二进制，**没有任何一处会碰到
+  打好的包** —— 这道守卫补的就是这个盲区。两个容易把它写成摆设的地方：
+  只跑 `--version` 验不出东西（走不到 `QGuiApplication`，缺平台插件照样打印版本号）；
+  AppImage 的冒烟必须摘掉 `APPIMAGE_EXTRACT_AND_RUN`（带着它跑会自解压再执行，
+  恰好绕开唯一会出问题的那条路径）。
+- `.deb` 与 `.tar.gz` 都带一道拒绝 conda 构建的 rpath 检查：这两个包不带 Qt 运行时，
+  拿 conda 的 Qt 编出来装到别人机器上必然起不来，而 dpkg 和 tar 都察觉不到。
+- macOS 的 `.app` 在 macdeployqt **之前**补 `libqoffscreen.dylib`（之后再拷，依赖路径
+  不会被改写成 `@executable_path/../Frameworks`），打完再用 `otool -L` 体检一遍，
+  确认 bundle 里没有指向构建机的绝对路径。
+- 四个产物都带 `i18n/*.qm`；界面译文一个都没加载上时会 `qWarning` 并列出找过的目录
+  —— `QTranslator` 找不到译文是静默回落到中文源字串的，不喊一声就没人会发现。
 - `cmake/Deploy.cmake`：把 windeployqt / macdeployqt / linuxdeploy 封成 CMake 函数，
   既能当模块 `include()`，也能 `cmake -P` 当脚本跑，三平台的打包脚本共用同一份逻辑。
 - `scripts/gen-docs.sh`：从 `--list-quirks --markdown` 生成 `docs/quirks.md`。
@@ -352,6 +292,18 @@ Ubuntu 22.04 上报 `CXXABI_1.3.15 not found`；tar.gz 被排进了那个 conda 
   `tests/e2e/helpers/quirk_cases.py` 的 `UNCOVERED` 里，暂由互操作手测矩阵兜底。
 - macvlan 编排只在 Linux 宿主上成立。macOS / Windows 的 Docker Desktop 跑在
   一层轻量虚拟机里，macvlan 接口到不了物理局域网。
+- **AppImage 依赖宿主的 OpenGL 与 X11 运行时库。** linuxdeploy 按设计不打包这些
+  —— 图形驱动必须用宿主那一份，打进去反而会在别的机器上坏掉。桌面发行版都自带，
+  但丢进纯净的服务器 / 容器里会是
+  `error while loading shared libraries: libGLX.so.0`。Debian / Ubuntu 上补齐：
+
+  ```bash
+  sudo apt install libgl1 libglx0 libopengl0 libegl1 \
+                   libx11-6 libx11-xcb1 libxcb1 libfontconfig1 libfreetype6
+  ```
+
+  纯无头场景用 `ghcr.io/mrtian2016/onvifsim` 这个镜像更合适。
+- AppImage 要求 glibc ≥ 2.34（Ubuntu 22.04 / Debian 12 / RHEL 9 及以后）。
 
 <!--
 每次发布时把「未发布」里的内容挪到新版本段落下，并在这里开一个空的新段落。

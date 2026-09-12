@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 四个打包脚本（deb / tar.gz / AppImage / dmg）共用的守卫。
 #
-# 这个文件的由来：v0.1.0 发出去的六个产物里有三个是坏的 —— AppImage 任何模式都
+# 这个文件的由来：首次发版打出来的六个产物里有三个是坏的 —— AppImage 任何模式都
 # 起不来、tar.gz 链的是构建机上的 conda Qt、两者都漏了 .qm。而单测、e2e、CI 全绿，
 # 因为**没有任何一处跑过打好的产物本身**。唯一完好的是 .deb，恰恰也是唯一在 CI 里
 # 装了再跑一遍的那个。
@@ -27,7 +27,7 @@ onvifsim_reject_conda_build() {
 # 把构建期生成的界面译文拷到包里。
 #
 # 漏了 .qm 不会报任何错 —— QTranslator 找不到译文就静默退回中文源字串，
-# 表现是「切成英文之后界面还是中文」。v0.1.0 的 AppImage / tar.gz / dmg 全中。
+# 表现是「切成英文之后界面还是中文」。首次发版时 AppImage / tar.gz / dmg 全中。
 onvifsim_install_translations() {
     local build_dir="$1" dest="$2"
     if compgen -G "${build_dir}/bin/i18n/*.qm" >/dev/null; then
@@ -46,7 +46,7 @@ onvifsim_install_translations() {
 # 两个地方都很容易写成「跑了但什么也没验到」：
 #
 # 1. **只跑 `--version` 是白跑的。** 它走不到 QGuiApplication，缺平台插件照样正常
-#    打印版本号 —— v0.1.0 那个坏 AppImage 就是 `--version` 好好的、一进 --headless
+#    打印版本号 —— 首次发版时那个坏 AppImage 就是 `--version` 好好的、一进 --headless
 #    直接 core dump。`--headless` 会构造 QGuiApplication 并加载 offscreen 平台插件，
 #    和图形模式走同一条插件查找路径，所以必须跑它。
 #

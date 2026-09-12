@@ -116,7 +116,7 @@ onvifsim —— ONVIF 摄像头模拟器（Windows 免安装版）
 # 只跑 --version 是白跑的：它走不到 QGuiApplication，缺 qoffscreen.dll 或少个
 # 第三方 DLL 照样正常打印版本号。--headless 会构造 QGuiApplication 并加载
 # offscreen 平台插件，才踩得到那条路。Linux / macOS 的打包脚本里有同一道守卫
-# （packaging/common.sh），起因是 v0.1.0 发出去三个起不来的产物。
+# （packaging/common.sh），起因是首次发版时打出过三个起不来的产物。
 $smokeExe = Join-Path $stage "onvifsim-cli.exe"
 if (-not (Test-Path $smokeExe)) { $smokeExe = Join-Path $stage "onvifsim.exe" }
 

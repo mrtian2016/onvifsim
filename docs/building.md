@@ -212,7 +212,7 @@ deb 的 `Depends` 是 `dpkg-shlibdeps` 从二进制实际链接的 `.so` 反推�
 机器上一跑就是 `libQt6Core.so.6: version 'Qt_6.11' not found`。
 两个脚本里都有一道 rpath 检查，发现 conda 的痕迹就直接拒绝。
 
-v0.1.0 的 tar.gz 正是漏了这道检查发出去的（当时守卫只在 deb 那边有）。
+首次发版时 tar.gz 正是漏了这道检查（当时守卫只在 deb 那边有）。
 
 部署工具（windeployqt / macdeployqt / linuxdeploy）的调用统一封在
 `cmake/Deploy.cmake` 里，三个脚本共用同一份逻辑。它既能当 CMake 模块 `include()`，
@@ -254,7 +254,7 @@ xattr -dr com.apple.quarantine /Applications/onvifsim.app
 再 `--headless` 起 5 秒看它还活着。失败就不出包。共用实现在
 `packaging/common.sh`。
 
-这道守卫是 v0.1.0 之后补的。那次六个产物里三个起不来（AppImage 的 Qt 插件
+这道守卫是首次发版试跑之后补的。那次六个产物里三个起不来（AppImage 的 Qt 插件
 路径、tar.gz 的 conda Qt、dmg 缺 offscreen 插件），而单测、e2e、CI 全绿 ——
 因为没有任何一处跑过打好的产物。唯一完好的 `.deb`，恰恰是唯一在 CI 里装了
 再跑一遍的那个。

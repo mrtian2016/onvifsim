@@ -22,7 +22,7 @@ if [ ! -x "${binary}" ]; then
 fi
 
 # 这一份靠系统 Qt，所以和 deb 一样不能拿 conda 的构建来打。
-# v0.1.0 的 tar.gz 就是这么坏的：拿 conda Qt 6.11 编出来，rpath 指向 CI runner
+# 首次发版时 tar.gz 就是这么坏的：拿 conda Qt 6.11 编出来，rpath 指向 CI runner
 # 的 micromamba 目录，装到任何发行版上都是 `version 'Qt_6.11' not found`。
 # deb 那边早有这道守卫，这边一直没有 —— 于是 release.yml 顺手把它排进了 conda 那个 job。
 onvifsim_reject_conda_build "${binary}" "tar.gz"

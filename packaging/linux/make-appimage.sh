@@ -78,7 +78,7 @@ export EXTRA_PLATFORM_PLUGINS="libqoffscreen.so;libqminimal.so"
 # 当系统库排除在外，所以 AppImage 对 libstdc++ 的版本要求＝构建机那一份。拿新
 # 工具链编，装到老系统上就是
 #   libstdc++.so.6: version `CXXABI_1.3.15' not found (required by libQt6Core.so.6)
-# 而「不挑发行版」正是 AppImage 存在的全部理由。v0.1.0 踩的就是这条（当时用
+# 而「不挑发行版」正是 AppImage 存在的全部理由。首次发版踩的就是这条（当时用
 # conda 的 GCC 15 编），发布工作流现在钉在 ubuntu-22.04 + runner 自带的 gcc。
 #
 # 本机验不出这条 —— 开发机的 libstdc++ 通常比目标系统新，坏包在本机一切正常。
@@ -102,7 +102,7 @@ export EXTRA_PLATFORM_PLUGINS="libqoffscreen.so;libqminimal.so"
 #   qt.qpa.plugin: Could not find the Qt platform plugin "offscreen" in ""
 #
 # **图形模式和 --headless 一起死**，而 `--version` 因为走不到 QGuiApplication
-# 仍然正常打印版本号。v0.1.0 就是这么发出去的。
+# 仍然正常打印版本号。首次发版试跑时就是这样漏过去的。
 #
 # 解法是自己写一个 AppRun 包装脚本，用运行时导出的 $APPDIR 明确指出插件在哪儿。
 # 直接跑 AppDir（没有运行时、$APPDIR 为空）时退回按脚本自身位置推算。
@@ -132,7 +132,7 @@ chmod +x "${target}"
 
 # 跑一遍打好的 AppImage 本身 —— 经运行时启动，不是解包后跑里面的二进制。
 # 这个区别就是全部：解包跑、挂载后跑 AppRun、手工设 QT_PLUGIN_PATH 跑，
-# 三种方式在 v0.1.0 那个坏包上都是好的，只有用户实际用的那种方式是坏的。
+# 三种方式在那个坏包上都是好的，只有用户实际用的那种方式是坏的。
 onvifsim_smoke_test "${target}" "AppImage"
 
 echo "打好了：${target}"

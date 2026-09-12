@@ -219,7 +219,7 @@ endfunction()
 # 少了它，.app 里的无界面模式一启动就是
 #   qt.qpa.plugin: Could not find the Qt platform plugin "offscreen"
 # 然后直接 abort。Windows 那边早就显式补了 qoffscreen.dll、Linux 靠
-# EXTRA_PLATFORM_PLUGINS 补，**只有 macOS 这条一直漏着** —— v0.1.0 的 dmg
+# EXTRA_PLATFORM_PLUGINS 补，**只有 macOS 这条一直漏着** —— 首次发版时的 dmg
 # 就是这么发出去的。
 # ---------------------------------------------------------------------------
 function(onvifsim_copy_macos_platform_plugins bundle)

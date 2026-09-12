@@ -12,7 +12,7 @@
 #     `shell:` 这个键又不吃 matrix 上下文，步骤只能按平台硬拆；
 #   - 自定义 shell 不会被注入 `set -e`，打包脚本失败过一次而 job still green；
 #   - conda 的 GCC 15 编出来的 Qt 要 `CXXABI_1.3.15`，AppImage 拿到
-#     Ubuntu 22.04 上直接起不来（发布 v0.1.0 之后才发现）；
+#     Ubuntu 22.04 上直接起不来（首次发版试跑时才撞上）；
 #   - conda-forge 的 Qt 还动态链着 zlib / pcre2 / zstd / brotli / freetype，
 #     Windows 打包得自己把它们捞出来（官方 Qt 二进制自带）。
 #

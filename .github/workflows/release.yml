@@ -66,7 +66,7 @@ jobs:
 
       # 用 **runner 自己的 gcc** 编（ubuntu-22.04 = GCC 11）。AppImage 不打包
       # libstdc++，所以二进制要求的 GLIBCXX 版本就是构建机那一份 —— 在最老的
-      # 目标发行版上编，产物才跑得动更老的系统。反面教材是 v0.1.0：用 conda 的
+      # 目标发行版上编，产物才跑得动更老的系统。反面教材是首次发版那次：用 conda 的
       # GCC 15 编，AppImage 在 Ubuntu 22.04 上报 `CXXABI_1.3.15 not found`。
       - name: 构建
         run: |
